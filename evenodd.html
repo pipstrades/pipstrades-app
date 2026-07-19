@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>pipstrades — Even/Odd Bot</title>
+<link rel="stylesheet" href="/evenodd.css">
+</head>
+<body>
+
+<div class="grid-overlay"></div>
+
+<div class="app">
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo-mark">◈</div>
+      <div class="logo-text">
+        <h1>EVEN<span class="accent">/</span>ODD</h1>
+        <span class="subtitle">pipstrades Auto Trader</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <a href="/dashboard" class="back-link">← Dashboard</a>
+      <div class="status-pill" id="connectionStatus" data-state="disconnected">
+        <span class="status-dot"></span>
+        <span class="status-label">Disconnected</span>
+      </div>
+      <div class="balance-row">
+        <div class="balance-block">
+          <span class="balance-label">Balance</span>
+          <span class="balance-value" id="balanceValue">--.--</span>
+        </div>
+        <div class="balance-block">
+          <span class="balance-label">Currency</span>
+          <span class="balance-value" id="currencyValue">--</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <!-- LEFT COLUMN -->
+    <div class="col col-left">
+
+      <!-- TRADE TYPE PANEL -->
+      <section class="panel" id="tradeTypePanel">
+        <div class="panel-head">
+          <span class="panel-eyebrow">01</span>
+          <h2>Trade Type</h2>
+        </div>
+
+        <div class="parity-toggle">
+          <button class="parity-btn parity-even active" id="evenBtn" data-parity="EVEN">
+            <span class="parity-icon">2</span>
+            <span>Even</span>
+          </button>
+          <button class="parity-btn parity-odd" id="oddBtn" data-parity="ODD">
+            <span class="parity-icon">1</span>
+            <span>Odd</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- TRADE SETTINGS -->
+      <section class="panel" id="settingsPanel">
+        <div class="panel-head">
+          <span class="panel-eyebrow">02</span>
+          <h2>Trade Settings</h2>
+        </div>
+
+        <div class="field">
+          <label for="symbolSelect">Volatility Index</label>
+          <select id="symbolSelect">
+            <option value="R_10">Volatility 10 Index</option>
+            <option value="R_25">Volatility 25 Index</option>
+            <option value="R_50">Volatility 50 Index</option>
+            <option value="R_75" selected>Volatility 75 Index</option>
+            <option value="R_100">Volatility 100 Index</option>
+            <option value="1HZ10V">Volatility 10 (1s) Index</option>
+            <option value="1HZ100V">Volatility 100 (1s) Index</option>
+          </select>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="stakeInput">Stake</label>
+            <input type="number" id="stakeInput" value="1" min="0.35" step="0.01">
+          </div>
+          <div class="field">
+            <label for="durationInput">Duration</label>
+            <input type="number" id="durationInput" value="1" min="1" step="1">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="durationUnit">Duration Unit</label>
+          <select id="durationUnit">
+            <option value="t" selected>Ticks</option>
+            <option value="s">Seconds</option>
+            <option value="m">Minutes</option>
+          </select>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="martingaleInput">Martingale Multiplier</label>
+            <input type="number" id="martingaleInput" value="2" min="1" step="0.1">
+          </div>
+          <div class="field">
+            <label for="lossPauseInput">Pause After Losses</label>
+            <input type="number" id="lossPauseInput" value="3" min="0" step="1">
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="stopLossInput">Session Stop Loss</label>
+            <input type="number" id="stopLossInput" value="20" min="0" step="0.5">
+          </div>
+          <div class="field">
+            <label for="takeProfitInput">Session Take Profit</label>
+            <input type="number" id="takeProfitInput" value="20" min="0" step="0.5">
+          </div>
+        </div>
+
+        <div class="pattern-note" id="patternNote">
+          Entry pattern (Even): ODD → ODD → ODD → EVEN, then buy EVEN.
+        </div>
+      </section>
+
+      <!-- CONTROLS -->
+      <section class="panel controls-panel">
+        <button class="btn btn-start" id="startBtn" disabled>Start Bot</button>
+        <button class="btn btn-stop hidden" id="stopBtn">Stop Bot</button>
+      </section>
+
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div class="col col-right">
+
+      <!-- LIVE TICK / DIGIT DISPLAY -->
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-eyebrow">03</span>
+          <h2>Live Digit Feed</h2>
+          <span class="symbol-tag" id="activeSymbolTag">R_75</span>
+        </div>
+
+        <div class="tick-readout">
+          <div class="last-digit-display">
+            <span class="last-digit-value" id="lastDigitValue">-</span>
+            <span class="last-digit-label" id="lastDigitParity">--</span>
+          </div>
+        </div>
+
+        <div class="live-price-box">
+          <span class="live-price-label" id="livePriceLabel">Volatility 75 Index Live Price</span>
+          <div class="live-price-value" id="lastQuoteValue">--</div>
+          <div class="live-price-lastdigit">Last digit: <span id="livePriceLastDigit">-</span></div>
+        </div>
+
+        <div class="digit-chart" id="digitChart"></div>
+
+        <div class="parity-summary">
+          <div class="parity-summary-block even-block">
+            <span class="parity-summary-label">Even</span>
+            <span class="parity-summary-value" id="evenCount">0</span>
+            <span class="parity-summary-pct" id="evenPct">0%</span>
+          </div>
+          <div class="parity-summary-block odd-block">
+            <span class="parity-summary-label">Odd</span>
+            <span class="parity-summary-value" id="oddCount">0</span>
+            <span class="parity-summary-pct" id="oddPct">0%</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- STATS -->
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-eyebrow">04</span>
+          <h2>Session Stats</h2>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-block">
+            <span class="stat-label">Trades</span>
+            <span class="stat-value" id="statTrades">0</span>
+          </div>
+          <div class="stat-block">
+            <span class="stat-label">Wins</span>
+            <span class="stat-value stat-win" id="statWins">0</span>
+          </div>
+          <div class="stat-block">
+            <span class="stat-label">Losses</span>
+            <span class="stat-value stat-loss" id="statLosses">0</span>
+          </div>
+          <div class="stat-block">
+            <span class="stat-label">Win Rate</span>
+            <span class="stat-value" id="statWinRate">0%</span>
+          </div>
+          <div class="stat-block">
+            <span class="stat-label">Net P/L</span>
+            <span class="stat-value" id="statPnl">0.00</span>
+          </div>
+          <div class="stat-block">
+            <span class="stat-label">Current Stake</span>
+            <span class="stat-value" id="statCurrentStake">--</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- LOG -->
+      <section class="panel log-panel">
+        <div class="panel-head">
+          <span class="panel-eyebrow">05</span>
+          <h2>Activity Log</h2>
+          <button class="btn-clear-log" id="clearLogBtn">Clear</button>
+        </div>
+        <div class="log-console" id="logConsole"></div>
+      </section>
+
+    </div>
+
+  </div>
+
+</div>
+
+<script type="module" src="/evenodd.js"></script>
+</body>
+</html>

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>pipstrades — Over/Under Bot</title>
+    <link rel="stylesheet" href="/overunder.css">
+</head>
+<body>
+<div class="app-container">
+
+    <!-- HEADER -->
+    <div class="glass-card header">
+        <div class="logo">
+            <h1>⚡ SMART OVER/UNDER BOT</h1>
+            <p>Intelligent Trading | Multiple Volatility Indices</p>
+        </div>
+        <div class="token-panel">
+            <a href="/dashboard" class="back-link">← Dashboard</a>
+            <div class="connection-status">
+                <span class="status-dot" id="connectionDot"></span>
+                <span id="connectionStatusText">Connecting…</span>
+            </div>
+            <div id="balanceDisplay" class="balance-box">
+                <span class="balance-label">BALANCE</span>
+                <span id="balanceValue" class="balance-amount">0.00</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- STATISTICS -->
+    <div class="glass-card stats-section">
+        <div class="stats-container">
+            <div class="stat-card">
+                <div class="stat-label">🎯 TOTAL TRADES</div>
+                <div class="stat-value" id="totalTrades">0</div>
+            </div>
+            <div class="stat-card win-stat">
+                <div class="stat-label">✅ WINS</div>
+                <div class="stat-value" id="totalWins">0</div>
+            </div>
+            <div class="stat-card loss-stat">
+                <div class="stat-label">❌ LOSSES</div>
+                <div class="stat-value" id="totalLosses">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">📈 WIN RATE</div>
+                <div class="stat-value" id="winRate">0%</div>
+            </div>
+            <div class="stat-card profit-stat">
+                <div class="stat-label">💰 TOTAL P/L</div>
+                <div class="stat-value" id="totalProfit">$0.00</div>
+            </div>
+            <div class="stat-card recovery-stat">
+                <div class="stat-label">🔄 RECOVERY MODE</div>
+                <div class="stat-value" id="recoveryModeStat">OFF</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TRADING DASHBOARD -->
+    <div class="trading-dashboard">
+
+        <!-- LEFT: Controls -->
+        <div class="glass-card contract-panel">
+            <div class="section-title">📈 SMART TRADING CONTROLS</div>
+
+            <!-- Market Selector -->
+            <div class="market-selector">
+                <label class="market-label">📊 SELECT MARKET</label>
+                <select id="marketSelect" class="market-select">
+                    <option value="R_10">Volatility 10 Index (1s tick)</option>
+                    <option value="R_25">Volatility 25 Index (1s tick)</option>
+                    <option value="R_50">Volatility 50 Index (1s tick)</option>
+                    <option value="R_75">Volatility 75 Index (1s tick)</option>
+                    <option value="R_100">Volatility 100 Index (1s tick)</option>
+                    <option value="1HZ10V">Volatility 10 Index (1HZ)</option>
+                    <option value="1HZ25V">Volatility 25 Index (1HZ)</option>
+                    <option value="1HZ50V">Volatility 50 Index (1HZ)</option>
+                    <option value="1HZ75V">Volatility 75 Index (1HZ)</option>
+                    <option value="1HZ100V">Volatility 100 Index (1HZ)</option>
+                </select>
+                <div class="market-info" id="marketInfo">Current: Volatility 10 Index (1s tick) — detecting decimal places...</div>
+            </div>
+
+            <!-- Live Price -->
+            <div class="live-price-container">
+                <div class="live-price-label" id="marketLabel">📊 VOLATILITY 10 INDEX LIVE PRICE</div>
+                <div id="livePriceDisplay" class="live-price">—</div>
+                <div class="last-digit-info">Last digit: <span id="currentLastDigit">—</span></div>
+            </div>
+
+            <!-- Stake -->
+            <div class="stake-control">
+                <label class="stake-label">💰 BASE STAKE AMOUNT (USD)</label>
+                <input type="number" id="stakeInput" class="stake-input" value="1.00" step="0.50" min="0.50">
+                <div class="stake-info">95% profit = $<span id="expectedProfit">0.95</span></div>
+            </div>
+
+            <!-- Recovery -->
+            <div class="recovery-control">
+                <div class="recovery-header">
+                    <label class="recovery-label">🔄 RECOVERY SYSTEM</label>
+                    <label class="switch">
+                        <input type="checkbox" id="recoveryToggle">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+                <div class="recovery-info" id="recoveryInfo" style="display:none;">
+                    <div class="recovery-status">
+                        <span>📊 Status:</span><span id="recoveryStatusText">OFF</span>
+                    </div>
+                    <div class="recovery-details">
+                        <span>📉 Consecutive Losses:</span><span id="consecutiveLossesCount">0</span>
+                    </div>
+                    <div class="recovery-details">
+                        <span>💰 Next Stake:</span><span id="nextStakeAmount">$1.00</span>
+                    </div>
+                    <div class="recovery-warning">⚠️ When ON: Stake doubles after loss, resets after win</div>
+                </div>
+            </div>
+
+            <!-- Auto Mode -->
+            <div class="auto-mode-control">
+                <div class="auto-mode-header">
+                    <label class="auto-mode-label">🤖 AUTO MODE (OVER 2 ↔ UNDER 7)</label>
+                    <label class="switch">
+                        <input type="checkbox" id="autoModeToggle">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+                <div class="auto-mode-info" id="autoModeInfo" style="display:none;">
+                    <div class="auto-status">
+                        <span>📊 Market Bias:</span><span id="marketBiasStatus">Neutral</span>
+                    </div>
+                    <div class="auto-details">
+                        <span>🔄 Current Strategy:</span><span id="autoCurrentStrategy">OVER 2</span>
+                    </div>
+                    <div class="auto-details">
+                        <span>📈 OVER 2 Strength:</span><span id="over2Strength">0%</span>
+                    </div>
+                    <div class="auto-details">
+                        <span>📉 UNDER 7 Strength:</span><span id="under7Strength">0%</span>
+                    </div>
+                    <div class="auto-warning">⚡ Switches only when lead ≥ 5% (hysteresis protection)</div>
+                </div>
+            </div>
+
+            <!-- Strategy Buttons (manual mode — OVER 2 / UNDER 7 only) -->
+            <div class="trading-options">
+                <div class="options-title">🎯 TRADING STRATEGY</div>
+                <div class="option-buttons">
+                    <button id="optionOver2Btn" class="option-btn over-option active">
+                        <span class="option-icon">📈</span>
+                        <span class="option-text">OVER 2</span>
+                        <span class="option-desc">Wins when last digit > 2 (digits 3-9)</span>
+                    </button>
+                    <button id="optionUnder7Btn" class="option-btn under-option">
+                        <span class="option-icon">📉</span>
+                        <span class="option-text">UNDER 7</span>
+                        <span class="option-desc">Wins when last digit < 7 (digits 0-6)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- RISK CONTROLS (stop-loss / take-profit only — other settings are fixed internally) -->
+            <div class="improve-panel">
+                <div class="improve-title">🛡️ Risk Controls</div>
+
+                <div class="improve-row">
+                    <div class="improve-label">
+                        🛑 Session Stop-Loss
+                        <small>Halt bot if session loss reaches this % of starting balance</small>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="stopLossToggle">
+                        <span class="slider round"></span>
+                    </label>
+                    <input type="number" id="stopLossPctInput" class="improve-input" value="10" min="1" max="50">
+                    <span style="font-size:0.75rem;color:#6b7280;">%</span>
+                </div>
+
+                <div class="improve-row">
+                    <div class="improve-label">
+                        🎯 Session Take-Profit
+                        <small>Halt bot when session profit reaches this % of starting balance</small>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="takeProfitToggle">
+                        <span class="slider round"></span>
+                    </label>
+                    <input type="number" id="takeProfitPctInput" class="improve-input" value="15" min="1" max="100">
+                    <span style="font-size:0.75rem;color:#6b7280;">%</span>
+                </div>
+                <div class="improve-status" id="riskStatusDisplay">No risk limits active</div>
+            </div>
+
+            <!-- Entry Digit (only the least-frequent digit is shown, not the full grid) -->
+            <div class="distribution-container">
+                <div class="distribution-title">📊 ENTRY DIGIT</div>
+                <div class="entry-digit-card">
+                    <div class="entry-digit-number" id="entryDigitNumber">—</div>
+                    <div class="entry-digit-pct" id="entryDigitPct">Waiting for ticks...</div>
+                </div>
+                <div id="leastFrequentDigit" class="least-frequent">Analyzing tick history...</div>
+            </div>
+
+            <div class="info-row">
+                <span class="info-label">⚡ Active Strategy</span>
+                <span id="activeStrategy" class="info-value">OVER 2</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">💰 Current Stake</span>
+                <span id="stakeAmount" class="info-value">1.00 USD</span>
+            </div>
+
+            <div class="bot-controls">
+                <button id="startBotBtn" class="start-bot-btn" disabled>▶ START BOT</button>
+                <button id="stopBotBtn" class="stop-bot-btn" disabled>⏹ STOP BOT</button>
+            </div>
+
+            <div id="botStatus" class="bot-status">🤖 Bot Status: IDLE</div>
+            <div id="tradeStatusMsg" class="status-msg">⏳ Connecting to your Deriv account…</div>
+        </div>
+
+        <!-- RIGHT: History -->
+        <div class="glass-card history-panel">
+            <div class="section-title">📜 REAL TRADE HISTORY</div>
+            <div id="historyContainer" class="history-list">
+                <div style="text-align:center;color:#5b6e8c;">No trades yet</div>
+            </div>
+            <button id="clearHistoryBtn" class="clear-history">🗑 Clear History &amp; Reset Stats</button>
+        </div>
+
+    </div>
+</div>
+
+<script type="module" src="/overunder.js"></script>
+</body>
+</html>

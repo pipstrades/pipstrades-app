@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>pipstrades — Connect your account</title>
+<style>
+  :root {
+    --void: #060a14;
+    --void-deep: #030509;
+    --panel: #0d1424;
+    --cyan: #2be8d9;
+    --magenta: #ff4fd8;
+    --text: #e8f4f2;
+    --text-dim: #7f93a8;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--void-deep);
+    font-family: 'Inter', -apple-system, sans-serif;
+    color: var(--text);
+    overflow: hidden;
+  }
+
+  canvas#stars {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+  }
+
+  .stage {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 18px;
+    opacity: 0.85;
+  }
+
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: clamp(28px, 5vw, 44px);
+    margin: 0 0 14px;
+    text-align: center;
+    letter-spacing: -0.01em;
+  }
+
+  h1 span {
+    background: linear-gradient(90deg, var(--cyan), var(--magenta));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  p.sub {
+    color: var(--text-dim);
+    text-align: center;
+    max-width: 420px;
+    line-height: 1.6;
+    font-size: 15px;
+    margin: 0 0 44px;
+  }
+
+  /* Signature element: the handshake line between two nodes */
+  .link-diagram {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 48px;
+  }
+
+  .node {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    box-shadow: 0 0 16px currentColor;
+  }
+
+  .node.you { color: var(--cyan); background: var(--cyan); }
+  .node.deriv { color: var(--magenta); background: var(--magenta); }
+
+  .wire {
+    position: relative;
+    width: 140px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--cyan), var(--magenta));
+    opacity: 0.35;
+  }
+
+  .wire::after {
+    content: '';
+    position: absolute;
+    top: -3px;
+    left: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text);
+    box-shadow: 0 0 10px var(--text);
+    animation: travel 2.4s linear infinite;
+  }
+
+  @keyframes travel {
+    0% { left: 0; opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { left: 132px; opacity: 0; }
+  }
+
+  button#connect {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--void-deep);
+    background: linear-gradient(90deg, var(--cyan), var(--magenta));
+    border: none;
+    border-radius: 10px;
+    padding: 16px 40px;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 0 0 rgba(43, 232, 217, 0);
+  }
+
+  button#connect:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(43, 232, 217, 0.25);
+  }
+
+  button#connect:focus-visible {
+    outline: 2px solid var(--text);
+    outline-offset: 3px;
+  }
+
+  button#connect:active {
+    transform: translateY(0);
+  }
+
+  .footnote {
+    margin-top: 28px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    opacity: 0.6;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .wire::after { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="stars"></canvas>
+
+<div class="stage">
+  <div class="eyebrow">pipstrades · secure connection</div>
+
+  <h1>Trade with your own <span>Deriv account</span></h1>
+  <p class="sub">
+    Authenticate directly with Deriv. Your credentials stay with Deriv —
+    this platform never sees your password, only a session token you can revoke anytime.
+  </p>
+
+  <div class="link-diagram">
+    <div class="node you"></div>
+    <div class="wire"></div>
+    <div class="node deriv"></div>
+  </div>
+
+  <button id="connect">Connect with Deriv</button>
+
+  <div class="footnote" id="status"></div>
+</div>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<script type="module">
+  import { startLogin } from '/src/core/auth/oauthClient.js';
+  import { isAuthenticated } from '/src/core/auth/tokenManager.js';
+
+  const statusEl = document.getElementById('status');
+  const btn = document.getElementById('connect');
+
+  if (isAuthenticated()) {
+    statusEl.textContent = 'Already connected — session active';
+    btn.textContent = 'Reconnect';
+  }
+
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.textContent = 'Redirecting to Deriv…';
+    try {
+      await startLogin();
+    } catch (err) {
+      statusEl.textContent = `Error: ${err.message}`;
+      btn.disabled = false;
+      btn.textContent = 'Connect with Deriv';
+    }
+  });
+
+  // Ambient starfield — decorative, respects reduced motion
+  const canvas = document.getElementById('stars');
+  const ctx = canvas.getContext('2d');
+  let stars = [];
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const count = Math.floor((canvas.width * canvas.height) / 9000);
+    stars = Array.from({ length: count }, () => ({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      r: Math.random() * 1.2 + 0.2,
+      s: Math.random() * 0.3 + 0.05,
+      o: Math.random() * 0.6 + 0.2,
+    }));
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#e8f4f2';
+    for (const star of stars) {
+      ctx.globalAlpha = star.o;
+      ctx.beginPath();
+      ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+      ctx.fill();
+      if (!prefersReducedMotion) {
+        star.y += star.s;
+        if (star.y > canvas.height) star.y = 0;
+      }
+    }
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(draw);
+  }
+
+  resize();
+  window.addEventListener('resize', resize);
+  draw();
+</script>
+
+</body>
+</html>

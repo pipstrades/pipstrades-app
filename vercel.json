@@ -1,0 +1,7 @@
+{
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/callback", "destination": "/callback.html" },
+    { "source": "/dashboard", "destination": "/dashboard.html" }
+  ]
+}

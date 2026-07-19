@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>pipstrades — Portfolio</title>
+<link rel="stylesheet" href="/portfolio.css">
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <span class="brand">pipstrades</span>
+      <span class="bell">
+        🔔
+        <span class="bell-badge" id="notifBadge">0</span>
+      </span>
+    </div>
+
+    <ul class="nav-list">
+      <li><a href="/portfolio.html" class="nav-item active"><span class="nav-icon">⌂</span> Home</a></li>
+      <li><a href="#" class="nav-item"><span class="nav-icon">▤</span> CFDs</a></li>
+      <li><a href="/dashboard" class="nav-item"><span class="nav-icon">⇄</span> Options</a></li>
+      <li><a href="#" class="nav-item"><span class="nav-icon">▣</span> Portfolio</a></li>
+    </ul>
+
+    <div class="sidebar-mid">
+      <a href="/dashboard" class="back-pill">← Back to bot dashboard</a>
+    </div>
+
+    <div class="sidebar-bottom">
+      <div class="avatar" id="avatarInitials">--</div>
+      <div class="profile-info">
+        <div class="profile-name" id="accountTypeLabel">Loading…</div>
+        <div class="profile-sub" id="accountIdLabel">—</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- BALANCE CARD -->
+    <div class="balance-card">
+      <div>
+        <div class="balance-label-row">Total value ›</div>
+        <div class="balance-value-row">
+          <span class="balance-value" id="totalBalance">--.--</span>
+          <button class="refresh-btn" id="refreshBtn" title="Refresh balance">⟳</button>
+        </div>
+        <div class="updated-text" id="updatedText">Connecting…</div>
+      </div>
+      <button class="deposit-btn" id="depositBtn">Deposit</button>
+    </div>
+
+    <!-- TRADING ACCOUNTS -->
+    <h2 class="section-heading">My trading accounts</h2>
+    <div class="accounts-grid">
+      <div class="account-card">
+        <div class="account-icon">MT5</div>
+        <div class="account-name">CFDs | Standard</div>
+        <div class="account-balance">0.00 <span class="currency">USD</span></div>
+      </div>
+
+      <div class="account-card">
+        <div class="account-icon live">⇄</div>
+        <div class="account-name">Options</div>
+        <div class="account-balance"><span id="optionsBalance">0.00</span> <span class="currency" id="optionsCurrency">USD</span></div>
+      </div>
+
+      <div class="account-card add-tile">
+        <div class="add-icon">+</div>
+        Add more accounts
+      </div>
+    </div>
+
+    <!-- EXPLORE ROW (decorative) -->
+    <h2 class="section-heading">Explore pipstrades</h2>
+    <div class="explore-grid">
+      <div class="explore-item">
+        <div class="explore-icon">📈</div>
+        <div class="explore-label">Over/Under</div>
+      </div>
+      <div class="explore-item">
+        <div class="explore-icon">🔁</div>
+        <div class="explore-label">Even/Odd</div>
+      </div>
+      <div class="explore-item">
+        <div class="explore-icon">🎯</div>
+        <div class="explore-label">Digit Matches</div>
+      </div>
+    </div>
+
+    <p class="connection-note">Balance shown reflects your live Deriv account via your connected session.</p>
+
+  </main>
+
+</div>
+
+<script type="module" src="/portfolio.js"></script>
+</body>
+</html>

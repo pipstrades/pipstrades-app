@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>pipstrades — Dashboard</title>
+<style>
+  :root {
+    --void-deep: #030509;
+    --panel: #0d1424;
+    --panel-border: #1c2740;
+    --cyan: #2be8d9;
+    --magenta: #ff4fd8;
+    --text: #e8f4f2;
+    --text-dim: #7f93a8;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--void-deep);
+    font-family: 'Inter', -apple-system, sans-serif;
+    color: var(--text);
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--panel-border);
+  }
+
+  .brand {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 18px;
+    letter-spacing: -0.01em;
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--cyan);
+    box-shadow: 0 0 8px var(--cyan);
+  }
+
+  button#logout {
+    background: transparent;
+    border: 1px solid var(--panel-border);
+    color: var(--text-dim);
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-left: 16px;
+  }
+
+  button#logout:hover {
+    border-color: var(--cyan);
+    color: var(--text);
+  }
+
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: clamp(22px, 4vw, 30px);
+    font-weight: 600;
+    margin: 0 0 6px;
+  }
+
+  p.lead {
+    color: var(--text-dim);
+    font-size: 14px;
+    margin: 0 0 36px;
+  }
+
+  .bot-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+  }
+
+  .bot-card {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    padding: 22px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+
+  .bot-card.available {
+    cursor: pointer;
+  }
+
+  .bot-card.available:hover {
+    border-color: var(--cyan);
+    transform: translateY(-2px);
+  }
+
+  .bot-card.locked {
+    opacity: 0.5;
+  }
+
+  .bot-name {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 16px;
+    margin: 0 0 6px;
+  }
+
+  .bot-desc {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin: 0 0 16px;
+    line-height: 1.5;
+  }
+
+  .bot-tag {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 100px;
+  }
+
+  .bot-tag.ready {
+    background: rgba(43, 232, 217, 0.12);
+    color: var(--cyan);
+  }
+
+  .bot-tag.soon {
+    background: rgba(127, 147, 168, 0.12);
+    color: var(--text-dim);
+  }
+
+  .session-note {
+    margin-top: 48px;
+    padding: 18px 20px;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  .session-note code {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--cyan);
+    font-size: 12px;
+  }
+
+  .account-switcher {
+    position: relative;
+    margin-left: 16px;
+  }
+
+  .switcher-trigger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 100px;
+    padding: 6px 14px 6px 6px;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+  }
+
+  .switcher-trigger:hover {
+    border-color: var(--cyan);
+  }
+
+  .switcher-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--void-deep);
+    background: var(--cyan);
+  }
+
+  .switcher-icon.real {
+    background: var(--magenta);
+  }
+
+  .switcher-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text);
+  }
+
+  .switcher-chevron {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .switcher-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 200px;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 6px;
+    z-index: 10;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+
+  .switcher-dropdown.open {
+    display: block;
+  }
+
+  .switcher-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.12s ease;
+  }
+
+  .switcher-option:hover {
+    background: var(--void-deep);
+  }
+
+  .switcher-option-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--void-deep);
+    flex-shrink: 0;
+  }
+
+  .switcher-option-icon.demo { background: var(--cyan); }
+  .switcher-option-icon.real { background: var(--magenta); }
+
+  .switcher-option-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .switcher-option-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text);
+  }
+
+  .switcher-option-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .switcher-check {
+    color: var(--cyan);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div style="display: flex; align-items: center;">
+    <div class="brand">pipstrades</div>
+    <a href="/portfolio.html" style="font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--text-dim); text-decoration: none; margin-left: 20px;">Portfolio →</a>
+  </div>
+  <div style="display: flex; align-items: center;">
+    <div class="status-pill">
+      <span class="dot"></span>
+      <span id="statusText">Checking session…</span>
+    </div>
+    <span id="balanceText" style="font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--cyan); margin-left: 16px;"></span>
+    <div class="account-switcher">
+      <button class="switcher-trigger" id="switcherTrigger">
+        <span class="switcher-icon" id="switcherIcon">D</span>
+        <span class="switcher-label" id="switcherLabel">Demo Account</span>
+        <span class="switcher-chevron">▾</span>
+      </button>
+      <div class="switcher-dropdown" id="switcherDropdown">
+        <div class="switcher-option" id="demoOption">
+          <span class="switcher-option-icon demo">D</span>
+          <span class="switcher-option-text">
+            <span class="switcher-option-name">Demo Account</span>
+            <span class="switcher-option-sub">Practice · USD</span>
+          </span>
+          <span class="switcher-check" id="demoCheck">✓</span>
+        </div>
+        <div class="switcher-option" id="realOption">
+          <span class="switcher-option-icon real">R</span>
+          <span class="switcher-option-text">
+            <span class="switcher-option-name">Real Account</span>
+            <span class="switcher-option-sub">Live · USD</span>
+          </span>
+          <span class="switcher-check" id="realCheck" style="visibility: hidden;">✓</span>
+        </div>
+      </div>
+    </div>
+    <button id="logout">Log out</button>
+  </div>
+</header>
+
+<main>
+  <h1>Choose a bot</h1>
+  <p class="lead">Each bot trades a different contract type. Pick one to configure and start a session.</p>
+
+  <div class="bot-grid">
+    <a href="/overunder.html" class="bot-card available" style="text-decoration:none; color:inherit; display:block;">
+      <span class="bot-tag ready">Ready</span>
+      <h3 class="bot-name" style="margin-top: 14px;">Over/Under</h3>
+      <p class="bot-desc">Digit frequency analysis with martingale staking and session stop-loss/take-profit.</p>
+    </a>
+
+    <a href="/evenodd.html" class="bot-card available" style="text-decoration:none; color:inherit; display:block;">
+      <span class="bot-tag ready">Ready</span>
+      <h3 class="bot-name" style="margin-top: 14px;">Even/Odd</h3>
+      <p class="bot-desc">Four-digit pattern entry logic with martingale staking and session limits.</p>
+    </a>
+
+    <div class="bot-card locked">
+      <span class="bot-tag soon">Coming soon</span>
+      <h3 class="bot-name" style="margin-top: 14px;">Digit Matches</h3>
+      <p class="bot-desc">Signal-based entries for Volatility 10 (1s) Index.</p>
+    </div>
+  </div>
+
+  <div class="session-note">
+    Over/Under and Even/Odd are live — click a card to start a session. Digit Matches
+    is still being migrated onto the shared trading connection.
+  </div>
+</main>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<script type="module">
+  import { isAuthenticated, clearToken, getToken } from '/src/core/auth/tokenManager.js';
+  import { connect, send, disconnect } from '/src/core/connection/wsClient.js';
+  import { on } from '/src/core/state/eventBus.js';
+  import { getAccountType, setAccountType } from '/src/core/state/accountPreference.js';
+
+  const statusText = document.getElementById('statusText');
+  const balanceText = document.getElementById('balanceText');
+  const logoutBtn = document.getElementById('logout');
+
+  const switcherTrigger = document.getElementById('switcherTrigger');
+  const switcherDropdown = document.getElementById('switcherDropdown');
+  const switcherIcon = document.getElementById('switcherIcon');
+  const switcherLabel = document.getElementById('switcherLabel');
+  const demoOption = document.getElementById('demoOption');
+  const realOption = document.getElementById('realOption');
+  const demoCheck = document.getElementById('demoCheck');
+  const realCheck = document.getElementById('realCheck');
+
+  if (!isAuthenticated()) {
+    // No valid session — bounce back to login.
+    window.location.href = '/';
+  } else {
+    statusText.textContent = 'Connected to Deriv';
+    refreshSwitcherUI();
+    startTradingConnection();
+  }
+
+  async function startTradingConnection() {
+    try {
+      const token = getToken();
+      await connect(token, getAccountType());
+      statusText.textContent = 'Connected · Live';
+      send({ balance: 1, subscribe: 1 });
+    } catch (err) {
+      console.error('Trading connection failed:', err);
+      statusText.textContent = 'Connected to Deriv (trading link failed)';
+    }
+  }
+
+  function refreshSwitcherUI() {
+    const current = getAccountType();
+    const isReal = current === 'real';
+    switcherIcon.textContent = isReal ? 'R' : 'D';
+    switcherIcon.classList.toggle('real', isReal);
+    switcherLabel.textContent = isReal ? 'Real Account' : 'Demo Account';
+    demoCheck.style.visibility = isReal ? 'hidden' : 'visible';
+    realCheck.style.visibility = isReal ? 'visible' : 'hidden';
+  }
+
+  switcherTrigger.addEventListener('click', () => {
+    switcherDropdown.classList.toggle('open');
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.account-switcher')) {
+      switcherDropdown.classList.remove('open');
+    }
+  });
+
+  function switchAccount(type) {
+    if (getAccountType() === type) {
+      switcherDropdown.classList.remove('open');
+      return;
+    }
+    if (type === 'real') {
+      const confirmed = window.confirm(
+        'Switch to your REAL account?\n\n' +
+        'Bots will place trades using real money. Make sure your stake, ' +
+        'stop-loss, and take-profit settings are exactly what you want ' +
+        'before starting any bot on Real.'
+      );
+      if (!confirmed) return;
+    }
+    setAccountType(type);
+    refreshSwitcherUI();
+    switcherDropdown.classList.remove('open');
+    disconnect();
+    balanceText.textContent = '';
+    startTradingConnection();
+  }
+
+  demoOption.addEventListener('click', () => switchAccount('demo'));
+  realOption.addEventListener('click', () => switchAccount('real'));
+
+  on('balance', (balance) => {
+    balanceText.textContent = `${balance.balance} ${balance.currency}`;
+  });
+
+  on('connection:error', (err) => {
+    console.error('WebSocket error:', err);
+  });
+
+  logoutBtn.addEventListener('click', () => {
+    disconnect();
+    clearToken();
+    window.location.href = '/';
+  });
+</script>
+
+</body>
+</html>

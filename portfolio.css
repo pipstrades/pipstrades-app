@@ -1,0 +1,352 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --coral: #ff444f;
+  --coral-dark: #e6323d;
+  --navy: #0e0e28;
+  --navy-light: #1c1d3a;
+  --text-dark: #1a1a2e;
+  --text-dim: #6e6e82;
+  --border: #e6e6ec;
+  --bg: #f8f8fb;
+}
+
+html, body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text-dark);
+  height: 100%;
+}
+
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width: 260px;
+  background: #ffffff;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 24px 20px;
+  flex-shrink: 0;
+}
+
+.sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 32px;
+}
+
+.brand {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--coral);
+  letter-spacing: -0.02em;
+}
+
+.bell {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  color: var(--text-dim);
+}
+
+.bell-badge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  background: var(--coral);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 100px;
+  padding: 1px 5px;
+}
+
+.nav-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+
+.nav-item:hover { background: var(--bg); }
+
+.nav-item.active {
+  color: var(--coral);
+  background: rgba(255, 68, 79, 0.08);
+}
+
+.nav-icon { font-size: 16px; width: 20px; text-align: center; }
+
+.sidebar-mid {
+  margin-top: 20px;
+  padding-top: 20px;
+}
+
+.back-pill {
+  display: block;
+  text-align: center;
+  padding: 10px 14px;
+  border-radius: 100px;
+  background: linear-gradient(90deg, rgba(255,68,79,0.08), rgba(45,232,255,0.08));
+  color: var(--text-dark);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.sidebar-bottom {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--navy);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.profile-info { flex: 1; min-width: 0; }
+.profile-name { font-size: 13px; font-weight: 600; }
+.profile-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── MAIN ── */
+.main {
+  flex: 1;
+  padding: 28px 36px;
+  max-width: 1100px;
+}
+
+/* Balance card */
+.balance-card {
+  background: var(--navy);
+  background-image: radial-gradient(ellipse 60% 100% at 100% 0%, rgba(255,68,79,0.15), transparent 60%);
+  border-radius: 16px;
+  padding: 24px 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: white;
+  margin-bottom: 28px;
+}
+
+.balance-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.6);
+  margin-bottom: 8px;
+}
+
+.balance-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.balance-value {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.refresh-btn {
+  background: rgba(255,255,255,0.08);
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  color: white;
+  cursor: pointer;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s, background 0.15s;
+}
+
+.refresh-btn:hover { background: rgba(255,255,255,0.15); }
+.refresh-btn.spinning { animation: spin 0.8s linear infinite; }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.updated-text {
+  font-size: 12px;
+  color: rgba(255,255,255,0.45);
+  margin-top: 6px;
+}
+
+.deposit-btn {
+  background: var(--coral);
+  color: white;
+  border: none;
+  border-radius: 100px;
+  padding: 12px 28px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.deposit-btn:hover { background: var(--coral-dark); }
+
+/* Section heading */
+.section-heading {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 8px 0 16px;
+}
+
+/* Accounts grid */
+.accounts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 220px));
+  gap: 16px;
+  margin-bottom: 36px;
+}
+
+.account-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+}
+
+.account-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--navy);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+
+.account-icon.live { background: var(--coral); }
+
+.account-name {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.account-balance {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.account-balance .currency {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  margin-left: 4px;
+}
+
+.account-card.add-tile {
+  border-style: dashed;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: default;
+}
+
+.add-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+/* Explore row */
+.explore-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 16px;
+  max-width: 640px;
+}
+
+.explore-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.explore-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: white;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.explore-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.connection-note {
+  margin-top: 32px;
+  font-size: 12px;
+  color: var(--text-dim);
+}

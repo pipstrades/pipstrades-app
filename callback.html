@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>pipstrades — Connecting…</title>
+<style>
+  :root {
+    --void-deep: #030509;
+    --cyan: #2be8d9;
+    --magenta: #ff4fd8;
+    --text: #e8f4f2;
+    --text-dim: #7f93a8;
+    --error: #ff6b6b;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--void-deep);
+    font-family: 'Inter', -apple-system, sans-serif;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .card {
+    text-align: center;
+    padding: 40px;
+    max-width: 400px;
+  }
+
+  .ring {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 28px;
+    border-radius: 50%;
+    border: 3px solid rgba(43, 232, 217, 0.15);
+    border-top-color: var(--cyan);
+    animation: spin 0.9s linear infinite;
+  }
+
+  .ring.done {
+    animation: none;
+    border: 3px solid var(--cyan);
+    border-top-color: var(--cyan);
+    position: relative;
+  }
+
+  .ring.done::after {
+    content: '✓';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--cyan);
+    font-size: 22px;
+    font-weight: 700;
+  }
+
+  .ring.failed {
+    animation: none;
+    border: 3px solid var(--error);
+  }
+
+  .ring.failed::after {
+    content: '×';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--error);
+    font-size: 26px;
+    font-weight: 700;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 10px;
+  }
+
+  p {
+    color: var(--text-dim);
+    font-size: 14px;
+    line-height: 1.6;
+    margin: 0 0 24px;
+  }
+
+  a.retry {
+    display: none;
+    color: var(--cyan);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+  }
+
+  a.retry:hover, a.retry:focus-visible {
+    border-bottom-color: var(--cyan);
+  }
+
+  a.retry.show { display: inline-block; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ring { animation: none; border-top-color: rgba(43, 232, 217, 0.4); }
+  }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="ring" id="ring"></div>
+  <h1 id="title">Connecting to Deriv…</h1>
+  <p id="message">Verifying your session, one moment.</p>
+  <a class="retry" id="retry" href="/">Try connecting again</a>
+</div>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+
+<script type="module">
+  import { handleOAuthCallback } from '/src/core/auth/callbackHandler.js';
+
+  const ring = document.getElementById('ring');
+  const title = document.getElementById('title');
+  const message = document.getElementById('message');
+  const retry = document.getElementById('retry');
+
+  handleOAuthCallback()
+    .then(() => {
+      ring.classList.add('done');
+      title.textContent = 'Connected';
+      message.textContent = 'Redirecting to your dashboard…';
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 1200);
+    })
+    .catch((err) => {
+      ring.classList.add('failed');
+      title.textContent = 'Connection failed';
+      message.textContent = err.message || 'Something went wrong during authentication.';
+      retry.classList.add('show');
+    });
+</script>
+
+</body>
+</html>
