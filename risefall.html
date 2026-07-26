@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>pipstrades — Rise/Fall Bot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/risefall.css" />
+</head>
+<body>
+<div class="stars"></div>
+
+<header class="topbar">
+  <h1>pipstrades <span class="accent">Rise/Fall</span></h1>
+  <div class="topbar-right">
+    <a href="/dashboard" class="back-link">← Dashboard</a>
+    <div class="conn-status" id="connStatus">● Disconnected</div>
+    <div class="balance-box" id="balanceBox">--.--</div>
+  </div>
+</header>
+
+<main class="grid">
+
+  <!-- Trade Settings -->
+  <section class="panel" id="panelSettings">
+    <h2>Trade Settings</h2>
+    <label>Symbol</label>
+    <select id="symbol">
+      <option value="R_10">Volatility 10 Index</option>
+      <option value="R_25">Volatility 25 Index</option>
+      <option value="R_50">Volatility 50 Index</option>
+      <option value="R_75" selected>Volatility 75 Index</option>
+      <option value="R_100">Volatility 100 Index</option>
+      <option value="1HZ10V">Volatility 10 (1s) Index</option>
+      <option value="1HZ100V">Volatility 100 (1s) Index</option>
+    </select>
+
+    <label>Stake</label>
+    <input type="number" id="stake" value="1" min="0.35" step="0.01" />
+
+    <label>Duration (ticks)</label>
+    <input type="number" id="duration" value="5" min="1" max="10" />
+
+    <label class="checkbox-row">
+      <input type="checkbox" id="martingaleToggle" />
+      Enable martingale on loss (multiplier)
+    </label>
+    <input type="number" id="martingaleMultiplier" value="2" min="1.1" step="0.1" disabled />
+
+    <label class="checkbox-row">
+      <input type="checkbox" id="stopLossToggle" />
+      Session stop-loss
+    </label>
+    <input type="number" id="stopLossValue" value="10" min="0" step="1" disabled />
+
+    <label class="checkbox-row">
+      <input type="checkbox" id="takeProfitToggle" />
+      Session take-profit
+    </label>
+    <input type="number" id="takeProfitValue" value="10" min="0" step="1" disabled />
+  </section>
+
+  <!-- Strategy Selector -->
+  <section class="panel panel-wide" id="panelStrategies">
+    <h2>Entry Strategy</h2>
+    <p class="hint">Only one strategy runs at a time. Toggle one on — the others switch off automatically.</p>
+    <div class="strategy-list" id="strategyList">
+      <!-- populated by risefall.js -->
+    </div>
+  </section>
+
+  <!-- Controls -->
+  <section class="panel panel-wide" id="panelControls">
+    <button id="btnStart" class="btn-primary btn-large" disabled>Start Bot</button>
+    <button id="btnStop" class="btn-danger btn-large" disabled>Stop Bot</button>
+    <div class="session-stats">
+      <div><span>P/L</span><strong id="statPL">0.00</strong></div>
+      <div><span>Wins</span><strong id="statWins">0</strong></div>
+      <div><span>Losses</span><strong id="statLosses">0</strong></div>
+      <div><span>Active Strategy</span><strong id="statStrategy">—</strong></div>
+    </div>
+  </section>
+
+  <!-- Log -->
+  <section class="panel panel-wide" id="panelLog">
+    <h2>Trade Log</h2>
+    <div id="log" class="log"></div>
+  </section>
+
+</main>
+
+<script type="module" src="/risefall.js"></script>
+</body>
+</html>
