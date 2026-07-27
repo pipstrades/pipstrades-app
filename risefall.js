@@ -5,10 +5,17 @@
 // a manual API Token form and the standalone bot's (incorrect/legacy) auth
 // endpoint.
 //
-// UNCHANGED from the original standalone bot: ema(), stddev(), rsi(), the
-// entire STRATEGIES object (M1 EMA Crossover, M2 Bollinger Reversion,
-// M3 Streak Exhaustion, M4 RSI Extreme), the single-active-strategy toggle
-// behavior, martingale staking, and session stop-loss/take-profit.
+// UNCHANGED building blocks from the original standalone bot: ema(),
+// stddev(), rsi() — the raw math. The four original signals (EMA
+// Crossover, Bollinger Reversion, Streak Exhaustion, RSI Extreme) have
+// been combined into two strategies per your request:
+//
+//   M1 = Bollinger Reversion + RSI Extreme, both required to agree
+//   M2 = EMA Crossover (as a regime filter) gating Streak Exhaustion —
+//        the streak signal only fires when EMA finds no clear trend
+//
+// The single-active-strategy toggle behavior, martingale staking, and
+// session stop-loss/take-profit are otherwise unchanged.
 //
 // One protocol-level fix (not entry logic): the proposal request now uses
 // `underlying_symbol` instead of `symbol`, matching Deriv's actual API and
@@ -105,42 +112,60 @@ function rsi(values, period) {
 
 const STRATEGIES = {
   M1: {
-    name: 'EMA Crossover',
-    desc: 'Fast EMA(5) crosses Slow EMA(20) + momentum confirmation',
-    minTicks: 21,
-    fn(history) {
-      const fast = ema(history.slice(-5), 5);
-      const slow = ema(history.slice(-20), 20);
-      const prevFast = ema(history.slice(-6, -1), 5);
-      const prevSlow = ema(history.slice(-21, -1), 20);
-      if (prevFast <= prevSlow && fast > slow) return 'CALL';
-      if (prevFast >= prevSlow && fast < slow) return 'PUT';
-      return null;
-    },
-  },
-  M2: {
-    name: 'Bollinger Reversion',
-    desc: 'Price touches outer band (20-period, 2 SD) -> fade back to mean',
+    name: 'Bollinger + RSI Confirmation',
+    desc: 'Price at outer Bollinger band AND RSI(14) confirms overbought/oversold — both must agree',
     minTicks: 20,
     fn(history) {
+      // Sub-signal 1: Bollinger Reversion (original M2 logic, unchanged)
       const window = history.slice(-20);
       const { mean, sd } = stddev(window);
       const last = history[history.length - 1];
       const upper = mean + 2 * sd;
       const lower = mean - 2 * sd;
-      if (last >= upper) return 'PUT';
-      if (last <= lower) return 'CALL';
+      let bollingerSignal = null;
+      if (last >= upper) bollingerSignal = 'PUT';
+      else if (last <= lower) bollingerSignal = 'CALL';
+
+      // Sub-signal 2: RSI Extreme (original M4 logic, unchanged)
+      const rsiValue = rsi(history, 14);
+      let rsiSignal = null;
+      if (rsiValue !== null) {
+        if (rsiValue > 70) rsiSignal = 'PUT';
+        else if (rsiValue < 30) rsiSignal = 'CALL';
+      }
+
+      // Only fire when both sub-signals agree on the same direction.
+      if (bollingerSignal !== null && bollingerSignal === rsiSignal) {
+        return bollingerSignal;
+      }
       return null;
     },
   },
-  M3: {
-    name: 'Streak Exhaustion',
-    desc: '4 consecutive same-direction ticks -> fade the streak',
-    minTicks: 5,
-    streakLen: 4,
+  M2: {
+    name: 'EMA Regime Filter + Streak Exhaustion',
+    desc: 'Streak-exhaustion signal only fires when the EMA crossover check finds no clear trend',
+    minTicks: 21,
     fn(history) {
-      const n = this.streakLen;
-      const recent = history.slice(-(n + 1));
+      // Regime gate: reuse the EMA crossover check (original M1 logic,
+      // unchanged). A non-null result means a crossover is happening right
+      // now — a clear trend — so we deliberately suppress the streak
+      // signal in that case.
+      const fast = ema(history.slice(-5), 5);
+      const slow = ema(history.slice(-20), 20);
+      const prevFast = ema(history.slice(-6, -1), 5);
+      const prevSlow = ema(history.slice(-21, -1), 20);
+      let emaSignal = null;
+      if (prevFast <= prevSlow && fast > slow) emaSignal = 'CALL';
+      else if (prevFast >= prevSlow && fast < slow) emaSignal = 'PUT';
+
+      if (emaSignal !== null) {
+        return null; // clear trend detected — do not fire the streak signal
+      }
+
+      // No clear trend ("ranging") — evaluate Streak Exhaustion
+      // (original M3 logic, unchanged).
+      const streakLen = 4;
+      const recent = history.slice(-(streakLen + 1));
       let allUp = true, allDown = true;
       for (let i = 1; i < recent.length; i++) {
         if (recent[i] <= recent[i - 1]) allUp = false;
@@ -148,18 +173,6 @@ const STRATEGIES = {
       }
       if (allUp) return 'PUT';
       if (allDown) return 'CALL';
-      return null;
-    },
-  },
-  M4: {
-    name: 'RSI Extreme',
-    desc: 'RSI(14) > 70 (overbought) or < 30 (oversold)',
-    minTicks: 15,
-    fn(history) {
-      const value = rsi(history, 14);
-      if (value === null) return null;
-      if (value > 70) return 'PUT';
-      if (value < 30) return 'CALL';
       return null;
     },
   },
