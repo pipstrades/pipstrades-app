@@ -15,7 +15,7 @@
   <h1>pipstrades <span class="accent">Rise/Fall</span></h1>
   <div class="topbar-right">
     <a href="/dashboard" class="back-link">← Dashboard</a>
-    <div class="conn-status" id="connStatus">● Disconnected</div>
+    <div class="conn-status" id="connStatus"><span class="dot" id="connDot"></span><span id="connLabel">Disconnected</span></div>
     <div class="balance-box" id="balanceBox">--.--</div>
   </div>
 </header>
@@ -25,67 +25,109 @@
   <!-- Trade Settings -->
   <section class="panel" id="panelSettings">
     <h2>Trade Settings</h2>
-    <label>Symbol</label>
-    <select id="symbol">
+    <label>Market</label>
+    <select id="symbolSelect">
       <option value="R_10">Volatility 10 Index</option>
       <option value="R_25">Volatility 25 Index</option>
       <option value="R_50">Volatility 50 Index</option>
-      <option value="R_75" selected>Volatility 75 Index</option>
-      <option value="R_100">Volatility 100 Index</option>
+      <option value="R_75">Volatility 75 Index</option>
+      <option value="R_100" selected>Volatility 100 Index</option>
       <option value="1HZ10V">Volatility 10 (1s) Index</option>
+      <option value="1HZ15V">Volatility 15 (1s) Index</option>
+      <option value="1HZ25V">Volatility 25 (1s) Index</option>
+      <option value="1HZ30V">Volatility 30 (1s) Index</option>
+      <option value="1HZ50V">Volatility 50 (1s) Index</option>
+      <option value="1HZ75V">Volatility 75 (1s) Index</option>
+      <option value="1HZ90V">Volatility 90 (1s) Index</option>
       <option value="1HZ100V">Volatility 100 (1s) Index</option>
     </select>
 
     <label>Stake</label>
-    <input type="number" id="stake" value="1" min="0.35" step="0.01" />
+    <input type="number" id="stakeInput" value="1" min="0.35" step="0.01" />
 
     <label>Duration (ticks)</label>
-    <input type="number" id="duration" value="5" min="1" max="10" />
+    <input type="number" id="durationInput" value="5" min="1" max="10" step="1" />
 
     <label class="checkbox-row">
       <input type="checkbox" id="martingaleToggle" />
-      Enable martingale on loss (multiplier)
+      Enable martingale on loss
     </label>
-    <input type="number" id="martingaleMultiplier" value="2" min="1.1" step="0.1" disabled />
+    <div class="field-row" id="martingaleRow" hidden>
+      <div class="field">
+        <label>Multiplier</label>
+        <input type="number" id="martingaleMult" value="2.1" min="1.1" step="0.1" />
+      </div>
+      <div class="field">
+        <label>Pause after N losses</label>
+        <input type="number" id="maxLosses" value="4" min="1" step="1" />
+      </div>
+    </div>
 
-    <label class="checkbox-row">
-      <input type="checkbox" id="stopLossToggle" />
-      Session stop-loss
-    </label>
-    <input type="number" id="stopLossValue" value="10" min="0" step="1" disabled />
-
-    <label class="checkbox-row">
-      <input type="checkbox" id="takeProfitToggle" />
-      Session take-profit
-    </label>
-    <input type="number" id="takeProfitValue" value="10" min="0" step="1" disabled />
+    <div class="field-row">
+      <div class="field">
+        <label>Session Stop Loss</label>
+        <input type="number" id="stopLossInput" value="10" min="0" step="0.5" />
+      </div>
+      <div class="field">
+        <label>Session Take Profit</label>
+        <input type="number" id="takeProfitInput" value="10" min="0" step="0.5" />
+      </div>
+    </div>
   </section>
 
-  <!-- Strategy Selector -->
-  <section class="panel panel-wide" id="panelStrategies">
+  <!-- Entry Strategy -->
+  <section class="panel" id="panelStrategy">
     <h2>Entry Strategy</h2>
-    <p class="hint">Only one strategy runs at a time. Toggle one on — the others switch off automatically.</p>
-    <div class="strategy-list" id="strategyList">
-      <!-- populated by risefall.js -->
+    <label>Strategy Mode</label>
+    <select id="strategyMode">
+      <option value="M2_M4" selected>Combo — M2 within last 3 ticks AND M4 confirms now — recommended</option>
+      <option value="M1_GATE_M3">Regime Gate — ADX detects trend strength, M3 fires only when ADX shows ranging</option>
+      <option value="M1">M1 only — EMA Crossover (trend-following)</option>
+      <option value="M2">M2 only — Bollinger Band Reversion</option>
+      <option value="M3">M3 only — Streak Exhaustion</option>
+      <option value="M4">M4 only — RSI Extreme</option>
+    </select>
+    <p class="hint" id="strategyHint"></p>
+
+    <div class="indicators">
+      <div class="ind"><span class="ind-label">Last Tick</span><span class="ind-value" id="indTick">—</span></div>
+      <div class="ind"><span class="ind-label">EMA Fast / Slow</span><span class="ind-value" id="indEma">— / —</span></div>
+      <div class="ind"><span class="ind-label">Bollinger (U / M / L)</span><span class="ind-value" id="indBoll">— / — / —</span></div>
+      <div class="ind"><span class="ind-label">RSI (14)</span><span class="ind-value" id="indRsi">—</span></div>
+      <div class="ind"><span class="ind-label">ADX (14)</span><span class="ind-value" id="indAdx">—</span></div>
+      <div class="ind"><span class="ind-label">Streak</span><span class="ind-value" id="indStreak">—</span></div>
+      <div class="ind" style="grid-column: 1 / -1;"><span class="ind-label">Regime (ADX-based)</span><span class="ind-value" id="indRegime">—</span></div>
     </div>
   </section>
 
   <!-- Controls -->
   <section class="panel panel-wide" id="panelControls">
-    <button id="btnStart" class="btn-primary btn-large" disabled>Start Bot</button>
-    <button id="btnStop" class="btn-danger btn-large" disabled>Stop Bot</button>
+    <button id="btnStart" class="btn-primary btn-large" disabled>▶ Start Bot</button>
+    <button id="btnStop" class="btn-danger btn-large" disabled>■ Stop Bot</button>
+    <div class="bot-state"><span class="dot" id="botDot"></span><span id="botStateLabel">IDLE</span></div>
     <div class="session-stats">
-      <div><span>P/L</span><strong id="statPL">0.00</strong></div>
+      <div><span>Trades</span><strong id="statTrades">0</strong></div>
       <div><span>Wins</span><strong id="statWins">0</strong></div>
       <div><span>Losses</span><strong id="statLosses">0</strong></div>
-      <div><span>Active Strategy</span><strong id="statStrategy">—</strong></div>
+      <div><span>Win Rate</span><strong id="statWinRate">0%</strong></div>
+      <div><span>Net P/L</span><strong id="statPnl">0.00</strong></div>
+      <div><span>Next Stake</span><strong id="statNextStake">—</strong></div>
     </div>
   </section>
 
-  <!-- Log -->
+  <!-- Log — shows only the most recent activity -->
   <section class="panel panel-wide" id="panelLog">
-    <h2>Trade Log</h2>
-    <div id="log" class="log"></div>
+    <h2>Activity Log</h2>
+    <div id="logBox" class="log"></div>
+  </section>
+
+  <!-- Trade History -->
+  <section class="panel panel-wide" id="panelHistory">
+    <h2>Trade History</h2>
+    <div class="history-list" id="historyList">
+      <p class="history-empty" id="historyEmpty">No trades yet this session.</p>
+    </div>
+    <button class="btn-clear" id="btnClearHistory">🗑 Clear History &amp; Reset Stats</button>
   </section>
 
 </main>
