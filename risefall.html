@@ -27,20 +27,22 @@
     <h2>Trade Settings</h2>
     <label>Market</label>
     <select id="symbolSelect">
+      <option value="AUTO">Auto — strongest live signal</option>
       <option value="R_10">Volatility 10 Index</option>
-      <option value="R_25">Volatility 25 Index</option>
-      <option value="R_50">Volatility 50 Index</option>
-      <option value="R_75">Volatility 75 Index</option>
-      <option value="R_100" selected>Volatility 100 Index</option>
       <option value="1HZ10V">Volatility 10 (1s) Index</option>
-      <option value="1HZ15V">Volatility 15 (1s) Index</option>
+      <option value="R_25">Volatility 25 Index</option>
       <option value="1HZ25V">Volatility 25 (1s) Index</option>
-      <option value="1HZ30V">Volatility 30 (1s) Index</option>
+      <option value="R_50">Volatility 50 Index</option>
       <option value="1HZ50V">Volatility 50 (1s) Index</option>
+      <option value="R_75">Volatility 75 Index</option>
       <option value="1HZ75V">Volatility 75 (1s) Index</option>
-      <option value="1HZ90V">Volatility 90 (1s) Index</option>
+      <option value="R_100" selected>Volatility 100 Index</option>
       <option value="1HZ100V">Volatility 100 (1s) Index</option>
+      <option value="1HZ15V">Volatility 15 (1s) Index</option>
+      <option value="1HZ30V">Volatility 30 (1s) Index</option>
+      <option value="1HZ90V">Volatility 90 (1s) Index</option>
     </select>
+    <p class="hint" id="autoHint" hidden>Auto mode scans every market at once and trades whichever one first meets the selected strategy's entry condition.</p>
 
     <label>Stake</label>
     <input type="number" id="stakeInput" value="1" min="0.35" step="0.01" />
@@ -90,6 +92,7 @@
     <p class="hint" id="strategyHint"></p>
 
     <div class="indicators">
+      <div class="ind"><span class="ind-label">Market</span><span class="ind-value" id="indMarket">—</span></div>
       <div class="ind"><span class="ind-label">Last Tick</span><span class="ind-value" id="indTick">—</span></div>
       <div class="ind"><span class="ind-label">EMA Fast / Slow</span><span class="ind-value" id="indEma">— / —</span></div>
       <div class="ind"><span class="ind-label">Bollinger (U / M / L)</span><span class="ind-value" id="indBoll">— / — / —</span></div>
