@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>pipstrades — Touch/No Touch Bot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/touchnotouch.css" />
+</head>
+<body>
+<div class="stars"></div>
+
+<header class="topbar">
+  <h1>pipstrades <span class="accent">Touch/No Touch</span></h1>
+  <div class="topbar-right">
+    <a href="/dashboard" class="back-link">← Dashboard</a>
+    <div class="conn-status" id="connStatus"><span class="dot" id="connDot"></span><span id="connLabel">Disconnected</span></div>
+    <div class="balance-box" id="balanceBox">--.--</div>
+  </div>
+</header>
+
+<main class="grid">
+
+  <!-- Trade Settings -->
+  <section class="panel" id="panelSettings">
+    <h2>Trade Settings</h2>
+    <label>Market</label>
+    <select id="symbolSelect">
+      <option value="AUTO">Auto — strongest live signal</option>
+      <option value="R_10">Volatility 10 Index</option>
+      <option value="1HZ10V">Volatility 10 (1s) Index</option>
+      <option value="R_25">Volatility 25 Index</option>
+      <option value="1HZ25V">Volatility 25 (1s) Index</option>
+      <option value="R_50">Volatility 50 Index</option>
+      <option value="1HZ50V">Volatility 50 (1s) Index</option>
+      <option value="R_75">Volatility 75 Index</option>
+      <option value="1HZ75V">Volatility 75 (1s) Index</option>
+      <option value="R_100" selected>Volatility 100 Index</option>
+      <option value="1HZ100V">Volatility 100 (1s) Index</option>
+      <option value="1HZ15V">Volatility 15 (1s) Index</option>
+      <option value="1HZ30V">Volatility 30 (1s) Index</option>
+      <option value="1HZ90V">Volatility 90 (1s) Index</option>
+    </select>
+    <p class="hint" id="autoHint" hidden>Auto mode scans every market at once and trades whichever one first meets the selected strategy's entry condition.</p>
+
+    <label>Stake</label>
+    <input type="number" id="stakeInput" value="1" min="0.35" step="0.01" />
+
+    <label>Duration (ticks)</label>
+    <input type="number" id="durationInput" value="15" min="5" max="100" step="1" />
+    <p class="hint">Touch contracts need room to develop — 5 ticks is Deriv's minimum for synthetic indices, but very short durations rarely give the barrier a fair chance to be reached (or avoided).</p>
+
+    <label class="checkbox-row">
+      <input type="checkbox" id="martingaleToggle" />
+      Enable martingale on loss
+    </label>
+    <div class="field-row" id="martingaleRow" hidden>
+      <div class="field">
+        <label>Multiplier</label>
+        <input type="number" id="martingaleMult" value="2.1" min="1.1" step="0.1" />
+      </div>
+      <div class="field">
+        <label>Pause after N losses</label>
+        <input type="number" id="maxLosses" value="4" min="1" step="1" />
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Session Stop Loss</label>
+        <input type="number" id="stopLossInput" value="10" min="0" step="0.5" />
+      </div>
+      <div class="field">
+        <label>Session Take Profit</label>
+        <input type="number" id="takeProfitInput" value="10" min="0" step="0.5" />
+      </div>
+    </div>
+  </section>
+
+  <!-- Entry Strategy -->
+  <section class="panel" id="panelStrategy">
+    <h2>Entry Strategy</h2>
+    <label>Strategy Mode</label>
+    <select id="strategyMode">
+      <option value="T3" selected>Auto Regime Switch — ranging → No-Touch, trending → One-Touch (recommended)</option>
+      <option value="T1">T1 — No-Touch only (barrier placed far, in the ADX-led direction)</option>
+      <option value="T2">T2 — One-Touch only (barrier placed close, in the ADX-led direction)</option>
+    </select>
+    <p class="hint" id="strategyHint"></p>
+
+    <div class="field-row">
+      <div class="field">
+        <label>No-Touch distance (× volatility)</label>
+        <input type="number" id="notouchMult" value="3" min="1" step="0.1" />
+      </div>
+      <div class="field">
+        <label>One-Touch distance (× volatility)</label>
+        <input type="number" id="onetouchMult" value="1.2" min="0.2" step="0.1" />
+      </div>
+    </div>
+
+    <div class="indicators">
+      <div class="ind"><span class="ind-label">Market</span><span class="ind-value" id="indMarket">—</span></div>
+      <div class="ind"><span class="ind-label">Last Tick</span><span class="ind-value" id="indTick">—</span></div>
+      <div class="ind"><span class="ind-label">Volatility (σ)</span><span class="ind-value" id="indVol">—</span></div>
+      <div class="ind"><span class="ind-label">ADX (14)</span><span class="ind-value" id="indAdx">—</span></div>
+      <div class="ind"><span class="ind-label">Lean Direction</span><span class="ind-value" id="indLean">—</span></div>
+      <div class="ind"><span class="ind-label">Regime</span><span class="ind-value" id="indRegime">—</span></div>
+      <div class="ind" style="grid-column: 1 / -1;"><span class="ind-label">Next Barrier (if signal fires now)</span><span class="ind-value" id="indBarrier">—</span></div>
+    </div>
+  </section>
+
+  <!-- Controls -->
+  <section class="panel panel-wide" id="panelControls">
+    <button id="btnStart" class="btn-primary btn-large" disabled>▶ Start Bot</button>
+    <button id="btnStop" class="btn-danger btn-large" disabled>■ Stop Bot</button>
+    <div class="bot-state"><span class="dot" id="botDot"></span><span id="botStateLabel">IDLE</span></div>
+    <div class="session-stats">
+      <div><span>Trades</span><strong id="statTrades">0</strong></div>
+      <div><span>Wins</span><strong id="statWins">0</strong></div>
+      <div><span>Losses</span><strong id="statLosses">0</strong></div>
+      <div><span>Win Rate</span><strong id="statWinRate">0%</strong></div>
+      <div><span>Net P/L</span><strong id="statPnl">0.00</strong></div>
+      <div><span>Next Stake</span><strong id="statNextStake">—</strong></div>
+    </div>
+  </section>
+
+  <!-- Log — shows only the most recent activity -->
+  <section class="panel panel-wide" id="panelLog">
+    <h2>Activity Log</h2>
+    <div id="logBox" class="log"></div>
+  </section>
+
+  <!-- Trade History -->
+  <section class="panel panel-wide" id="panelHistory">
+    <h2>Trade History</h2>
+    <div class="history-list" id="historyList">
+      <p class="history-empty" id="historyEmpty">No trades yet this session.</p>
+    </div>
+    <button class="btn-clear" id="btnClearHistory">🗑 Clear History &amp; Reset Stats</button>
+  </section>
+
+</main>
+
+<script type="module" src="/touchnotouch.js"></script>
+</body>
+</html>
