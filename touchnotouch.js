@@ -457,7 +457,7 @@ function renderIndicators(ms, symbol, price) {
 
   const preview = evaluateStrategy(ms);
   if (preview) {
-    els.indBarrier.textContent = `${preview.contractType} ${formatBarrier(preview.barrierOffset, d)}`;
+    els.indBarrier.textContent = `${preview.contractType} ${formatBarrier(preview.barrierOffset)}`;
   } else {
     els.indBarrier.textContent = 'not ready';
   }
@@ -503,10 +503,11 @@ function evaluateStrategy(ms) {
   }
 }
 
-function formatBarrier(offset, pipSize) {
-  const decimals = pipSize + 2;
+function formatBarrier(offset) {
+  // Deriv rejects relative barriers with more than 2 decimal places,
+  // regardless of the underlying market's own pip size.
   const sign = offset >= 0 ? '+' : '';
-  return sign + offset.toFixed(decimals);
+  return sign + offset.toFixed(2);
 }
 
 // =======================================================
@@ -518,8 +519,7 @@ function executeTrade(signal, symbol) {
 
   const stake = state.nextStake;
   const duration = parseInt(els.durationInput.value, 10) || 15;
-  const ms = state.marketStates.get(symbol);
-  const barrierStr = formatBarrier(signal.barrierOffset, ms ? ms.pipSize : 2);
+  const barrierStr = formatBarrier(signal.barrierOffset);
 
   state.activeTradeMeta = {
     contractType: signal.contractType,
