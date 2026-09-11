@@ -231,6 +231,15 @@ busOn('connection:close', () => {
 
 busOn('connection:error', (err) => {
   log('WebSocket error: ' + (err.message || err), 'err');
+  // A rejected proposal/buy must not permanently lock the bot out of
+  // future trades — clear whatever this request was waiting on so the
+  // next tick can be evaluated normally.
+  if (state.awaiting) {
+    state.awaiting = null;
+    state.tradeInFlight = false;
+    state.activeTradeMeta = null;
+    log('Trade request rejected — resuming signal evaluation.', 'warn');
+  }
 });
 
 busOn('balance', (balance) => {
