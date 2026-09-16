@@ -1,13 +1,15 @@
 /* =========================================================================
-   PIPSTRADES — EVEN/ODD BOT (connection section replaced only)
-   =========================================================================
-   Uses the platform's shared OAuth session + WebSocket connection instead
-   of a manual API Token / App ID / Account ID form.
-
-   UNCHANGED from the original bot: pattern-based entry logic
-   (checkPatternMatch), resolveTradeStrategy, auto-mode contrarian pick,
-   martingale staking, session stop-loss/take-profit, loss-pause, digit
-   chart, parity summary, and all stats.
+   PIPSTRADES — EVEN/ODD BOT
+   Two independent, mutually-exclusive entry strategies:
+     Alpha 1 (current, unchanged) — target = OPPOSITE parity of the single
+       most-frequent digit; entry digit = least-frequent digit WITHIN that
+       top digit's own parity group.
+     Alpha 2 (new) — target = whichever parity (even/odd) leads in
+       aggregate count; entry digit = least-frequent digit WITHIN THE
+       OPPOSITE parity group from the target.
+   Only one runs at a time — toggling one on switches the other off.
+   Everything else (connection, staking, session limits, stats, log) is
+   shared and unaffected by which strategy is active.
    ========================================================================= */
 
 import { isAuthenticated, getToken } from '/src/core/auth/tokenManager.js';
@@ -19,23 +21,19 @@ import {
 import { on as busOn } from '/src/core/state/eventBus.js';
 import { getAccountType } from '/src/core/state/accountPreference.js';
 
-/* ---------------------------------------------------------------------
-   CONFIG
-   --------------------------------------------------------------------- */
 const CONFIG = {
   MIN_STAKE: 0.35
 };
 
-/* ---------------------------------------------------------------------
-   ELEMENT CACHE (window.els, not window.el)
-   --------------------------------------------------------------------- */
 window.els = {
   connectionStatus: document.getElementById('connectionStatus'),
   balanceValue: document.getElementById('balanceValue'),
   currencyValue: document.getElementById('currencyValue'),
 
-  evenBtn: document.getElementById('evenBtn'),
-  oddBtn: document.getElementById('oddBtn'),
+  alpha1Row: document.getElementById('alpha1Row'),
+  alpha2Row: document.getElementById('alpha2Row'),
+  alpha1Toggle: document.getElementById('alpha1Toggle'),
+  alpha2Toggle: document.getElementById('alpha2Toggle'),
 
   symbolSelect: document.getElementById('symbolSelect'),
   stakeInput: document.getElementById('stakeInput'),
@@ -73,9 +71,6 @@ window.els = {
   clearLogBtn: document.getElementById('clearLogBtn')
 };
 
-/* ---------------------------------------------------------------------
-   STATE
-   --------------------------------------------------------------------- */
 const state = {
   connected: false,
   botRunning: false,
@@ -83,9 +78,11 @@ const state = {
   currency: null,
   balance: null,
 
+  activeStrategy: 'alpha1', // 'alpha1' | 'alpha2' — mutually exclusive
+
   activeSymbol: 'R_75',
-  decimalPlaces: null,           // auto-detected from live ticks
-  digitHistory: [],              // rolling window of last digits
+  decimalPlaces: null,
+  digitHistory: [],
   digitCounts: new Array(10).fill(0),
   lastDigit: null,
 
@@ -104,9 +101,12 @@ const state = {
 };
 
 const HISTORY_WINDOW = 100;
+const MIN_SAMPLE_SIZE = 20;
+const ODD_DIGITS = [1, 3, 5, 7, 9];
+const EVEN_DIGITS = [0, 2, 4, 6, 8];
 
 /* ---------------------------------------------------------------------
-   LOGGING (unchanged)
+   LOGGING — shows only the most recent activity.
    --------------------------------------------------------------------- */
 function log(message, level = 'info') {
   const time = new Date().toLocaleTimeString();
@@ -128,7 +128,7 @@ window.els.clearLogBtn.addEventListener('click', () => {
 });
 
 /* ---------------------------------------------------------------------
-   CONNECTION STATUS UI (unchanged)
+   CONNECTION STATUS UI
    --------------------------------------------------------------------- */
 function setConnectionState(stateName) {
   const pill = window.els.connectionStatus;
@@ -139,8 +139,7 @@ function setConnectionState(stateName) {
 }
 
 /* ---------------------------------------------------------------------
-   CONNECTION — via platform OAuth session + shared wsClient
-   (replaces the old API Token / App ID / Account ID form entirely)
+   CONNECTION — platform OAuth + shared wsClient
    --------------------------------------------------------------------- */
 async function startConnection() {
   if (!isAuthenticated()) {
@@ -160,7 +159,6 @@ async function startConnection() {
     const accountLabel = getAccountType() === 'real' ? 'Real' : 'Demo';
     log(`Connected (${accountLabel}).`, 'info');
     if (getAccountType() === 'real') {
-      window.els.connectionStatus.querySelector('.status-label').textContent = 'Connected · Real';
       window.els.connectionStatus.querySelector('.status-label').style.color = 'var(--red)';
     }
 
@@ -194,9 +192,8 @@ function subscribeBalance() {
 }
 
 /* ---------------------------------------------------------------------
-   PRELOAD TICK HISTORY — fetches Deriv's own recent tick history so the
-   digit distribution and target/entry digits are stable immediately,
-   instead of starting at 0 and drifting as live ticks slowly accumulate.
+   PRELOAD TICK HISTORY — real Deriv history so the distribution is
+   stable immediately instead of building live from zero.
    --------------------------------------------------------------------- */
 async function preloadTickHistory(symbol) {
   try {
@@ -249,8 +246,6 @@ async function preloadTickHistory(symbol) {
 }
 
 async function subscribeTicks(symbol) {
-  // Reset digit history whenever the symbol changes so stale data from a
-  // different market never leaks into the current chart or trade logic.
   state.activeSymbol = symbol;
   state.decimalPlaces = null;
   state.digitHistory = [];
@@ -282,7 +277,7 @@ window.els.symbolSelect.addEventListener('change', (e) => {
 });
 
 /* ---------------------------------------------------------------------
-   EVENT BUS LISTENERS (replaces old raw ws.onmessage routing)
+   EVENT BUS LISTENERS
    --------------------------------------------------------------------- */
 busOn('balance', (balance) => handleBalance(balance));
 busOn('tick', (tick) => handleTick(tick));
@@ -291,7 +286,7 @@ busOn('buy', (buy) => handleBuy(buy));
 busOn('contractUpdate', (poc) => handleProposalOpenContract(poc));
 
 /* ---------------------------------------------------------------------
-   BALANCE (unchanged)
+   BALANCE
    --------------------------------------------------------------------- */
 function handleBalance(balance) {
   if (!balance) return;
@@ -302,7 +297,7 @@ function handleBalance(balance) {
 }
 
 /* ---------------------------------------------------------------------
-   TICKS (unchanged)
+   TICKS
    --------------------------------------------------------------------- */
 function handleTick(tick) {
   if (!tick || tick.symbol !== state.activeSymbol) return;
@@ -348,22 +343,17 @@ function updateLastDigitDisplay(digit) {
 function renderDigitChart() {
   const container = window.els.digitChart;
   container.innerHTML = '';
-
   for (let d = 0; d <= 9; d++) {
     const count = state.digitCounts[d];
     const isOdd = d % 2 !== 0;
-
     const tile = document.createElement('div');
     tile.className = 'digit-tile' + (isOdd ? ' odd-digit' : '');
-
     const digitEl = document.createElement('span');
     digitEl.className = 'digit-tile-digit';
     digitEl.textContent = d;
-
     const countEl = document.createElement('span');
     countEl.className = 'digit-tile-count';
     countEl.textContent = count;
-
     tile.appendChild(digitEl);
     tile.appendChild(countEl);
     container.appendChild(tile);
@@ -383,38 +373,18 @@ function updateParitySummary() {
 }
 
 /* ---------------------------------------------------------------------
-   TRADE STRATEGY — distribution-driven entry
-   ---------------------------------------------------------------------
-   1. Find the digit (0-9) with the highest occurrence count in the
-      rolling window — the "top digit".
-   2. Its parity decides the target contract:
-        top digit is ODD  → target EVEN
-        top digit is EVEN → target ODD
-   3. Within that same parity group as the top digit, find the digit
-      with the LOWEST occurrence count — the "entry digit".
-   4. Every tick, check if the just-arrived digit equals the entry
-      digit. If it does (and the condition above still holds), fire the
-      trade for the target contract immediately, on that same tick.
-
-   Example: top digit = 3 (ODD, most frequent) → target EVEN,
-            entry digit = 7 (least frequent ODD digit) → buy EVEN the
-            instant a "7" ticks in.
+   ALPHA 1 — CURRENT strategy, UNCHANGED math.
+   Target = OPPOSITE parity of the single most-frequent digit.
+   Entry digit = least-frequent digit WITHIN that top digit's own
+   parity group.
    --------------------------------------------------------------------- */
-
-const MIN_SAMPLE_SIZE = 20; // don't act on a distribution with too little data
-
-const ODD_DIGITS = [1, 3, 5, 7, 9];
-const EVEN_DIGITS = [0, 2, 4, 6, 8];
-
-function resolveDistributionStrategy() {
+function resolveAlpha1Strategy() {
   if (state.digitHistory.length < MIN_SAMPLE_SIZE) {
     return { status: 'collecting', sample: state.digitHistory.length };
   }
 
   const counts = state.digitCounts;
 
-  // Step 1: find the single most frequent digit. If there's a tie for
-  // the top spot, the signal is ambiguous — skip this tick.
   let topDigit = null;
   let topCount = -1;
   let topTie = false;
@@ -429,12 +399,10 @@ function resolveDistributionStrategy() {
   }
   if (topTie) return { status: 'ambiguous' };
 
-  // Step 2: top digit's parity decides the target contract.
   const topIsOdd = topDigit % 2 !== 0;
   const targetContract = topIsOdd ? 'EVEN' : 'ODD';
   const group = topIsOdd ? ODD_DIGITS : EVEN_DIGITS;
 
-  // Step 3: within that same parity group, find the least frequent digit.
   let entryDigit = null;
   let minCount = Infinity;
   group.forEach((d) => {
@@ -453,23 +421,101 @@ function resolveDistributionStrategy() {
   };
 }
 
+/* ---------------------------------------------------------------------
+   ALPHA 2 — NEW strategy.
+   Target = whichever parity (EVEN/ODD) leads in AGGREGATE count.
+   Entry digit = least-frequent digit WITHIN THE OPPOSITE parity group
+   from the target.
+   --------------------------------------------------------------------- */
+function resolveAlpha2Strategy() {
+  if (state.digitHistory.length < MIN_SAMPLE_SIZE) {
+    return { status: 'collecting', sample: state.digitHistory.length };
+  }
+
+  const counts = state.digitCounts;
+
+  let evenCount = 0;
+  for (let d = 0; d <= 9; d += 2) evenCount += counts[d];
+  const oddCount = state.digitHistory.length - evenCount;
+  if (evenCount === oddCount) return { status: 'ambiguous' };
+  const targetContract = evenCount > oddCount ? 'EVEN' : 'ODD';
+
+  const oppositeGroup = targetContract === 'EVEN' ? ODD_DIGITS : EVEN_DIGITS;
+  let entryDigit = null;
+  let minCount = Infinity;
+  let minTie = false;
+  oppositeGroup.forEach((d) => {
+    if (counts[d] < minCount) {
+      minCount = counts[d];
+      entryDigit = d;
+      minTie = false;
+    } else if (counts[d] === minCount) {
+      minTie = true;
+    }
+  });
+  if (minTie) return { status: 'ambiguous' };
+
+  return {
+    status: 'ready',
+    entryDigit,
+    targetContract,
+    evenCount,
+    oddCount
+  };
+}
+
+/* ---------------------------------------------------------------------
+   Dispatch to whichever strategy is currently active.
+   --------------------------------------------------------------------- */
+function resolveActiveStrategy() {
+  return state.activeStrategy === 'alpha2' ? resolveAlpha2Strategy() : resolveAlpha1Strategy();
+}
+
 function evaluateEntrySignal() {
   renderStrategyStatus();
 
   if (!state.botRunning) return;
   if (state.awaitingProposal || state.awaitingBuy || state.pendingContractId) return;
 
-  const strategy = resolveDistributionStrategy();
+  const strategy = resolveActiveStrategy();
   if (strategy.status !== 'ready') return;
 
-  // Fire the instant the just-arrived digit matches the computed entry digit.
   if (state.lastDigit === strategy.entryDigit) {
     fireTrade(strategy.targetContract);
   }
 }
 
 /* ---------------------------------------------------------------------
-   PROPOSAL -> BUY -> PROPOSAL_OPEN_CONTRACT (UNCHANGED)
+   STRATEGY TOGGLES — mutually exclusive, always exactly one active.
+   --------------------------------------------------------------------- */
+function setActiveStrategy(name) {
+  state.activeStrategy = name;
+  window.els.alpha1Toggle.checked = name === 'alpha1';
+  window.els.alpha2Toggle.checked = name === 'alpha2';
+  window.els.alpha1Row.classList.toggle('active', name === 'alpha1');
+  window.els.alpha2Row.classList.toggle('active', name === 'alpha2');
+  renderStrategyStatus();
+}
+
+window.els.alpha1Toggle.addEventListener('change', (e) => {
+  if (e.target.checked) {
+    setActiveStrategy('alpha1');
+  } else {
+    // Exactly one must always be active — refuse to leave both off.
+    e.target.checked = true;
+  }
+});
+
+window.els.alpha2Toggle.addEventListener('change', (e) => {
+  if (e.target.checked) {
+    setActiveStrategy('alpha2');
+  } else {
+    e.target.checked = true;
+  }
+});
+
+/* ---------------------------------------------------------------------
+   PROPOSAL -> BUY -> PROPOSAL_OPEN_CONTRACT
    --------------------------------------------------------------------- */
 function fireTrade(parity) {
   const contractType = parity === 'EVEN' ? 'DIGITEVEN' : 'DIGITODD';
@@ -488,7 +534,7 @@ function fireTrade(parity) {
     underlying_symbol: state.activeSymbol
   });
 
-  log(`Signal confirmed — requesting ${parity} proposal (stake ${state.currentStake.toFixed(2)}).`, 'info');
+  log(`Signal confirmed (${state.activeStrategy}) — requesting ${parity} proposal (stake ${state.currentStake.toFixed(2)}).`, 'info');
 }
 
 function handleProposal(proposal) {
@@ -549,7 +595,7 @@ function handleProposalOpenContract(poc) {
 }
 
 /* ---------------------------------------------------------------------
-   STATS / SESSION LIMITS (UNCHANGED)
+   STATS / SESSION LIMITS
    --------------------------------------------------------------------- */
 function updateStatsUI() {
   window.els.statWins.textContent = state.wins;
@@ -583,37 +629,40 @@ function checkLossPause() {
 }
 
 /* ---------------------------------------------------------------------
-   TRADE SIDE STATUS (auto-computed — no manual controls)
+   TRADE SIDE STATUS (auto-computed display, per active strategy)
    --------------------------------------------------------------------- */
 function renderStrategyStatus() {
-  const strategy = resolveDistributionStrategy();
+  const strategy = resolveActiveStrategy();
 
   if (strategy.status === 'collecting') {
-    window.els.evenBtn.classList.remove('active');
-    window.els.oddBtn.classList.remove('active');
     window.els.patternNote.textContent =
-      `Collecting live digit data… (${strategy.sample}/${MIN_SAMPLE_SIZE} ticks)`;
+      `[${state.activeStrategy.toUpperCase()}] Collecting live digit data… (${strategy.sample}/${MIN_SAMPLE_SIZE} ticks)`;
     return;
   }
 
   if (strategy.status === 'ambiguous') {
-    window.els.evenBtn.classList.remove('active');
-    window.els.oddBtn.classList.remove('active');
     window.els.patternNote.textContent =
-      'Top digit is tied between multiple digits — waiting for a clear leader.';
+      `[${state.activeStrategy.toUpperCase()}] Distribution is tied — waiting for a clear signal.`;
     return;
   }
 
-  window.els.evenBtn.classList.toggle('active', strategy.targetContract === 'EVEN');
-  window.els.oddBtn.classList.toggle('active', strategy.targetContract === 'ODD');
-  window.els.patternNote.textContent =
-    `Top digit ${strategy.topDigit} (${strategy.topParity}) is most frequent → ` +
-    `target ${strategy.targetContract}. Waiting for entry digit ${strategy.entryDigit} ` +
-    `(least-frequent ${strategy.topParity.toLowerCase()} digit) to buy ${strategy.targetContract}.`;
+  if (state.activeStrategy === 'alpha1') {
+    window.els.patternNote.textContent =
+      `[ALPHA 1] Top digit ${strategy.topDigit} (${strategy.topParity}) is most frequent → target ${strategy.targetContract}. ` +
+      `Entry digit ${strategy.entryDigit} (least-frequent ${strategy.topParity.toLowerCase()} digit) → buy ${strategy.targetContract}.`;
+  } else {
+    const evenPct = ((strategy.evenCount / state.digitHistory.length) * 100).toFixed(1);
+    const oddPct = ((strategy.oddCount / state.digitHistory.length) * 100).toFixed(1);
+    const oppositeParity = strategy.targetContract === 'EVEN' ? 'odd' : 'even';
+    window.els.patternNote.textContent =
+      `[ALPHA 2] ${strategy.targetContract} digits lead overall (${strategy.targetContract === 'EVEN' ? evenPct : oddPct}% ` +
+      `vs ${strategy.targetContract === 'EVEN' ? oddPct : evenPct}%) → trading ${strategy.targetContract}. ` +
+      `Entry digit ${strategy.entryDigit} is the least-frequent ${oppositeParity} digit → buy ${strategy.targetContract}.`;
+  }
 }
 
 /* ---------------------------------------------------------------------
-   START / STOP BOT (UNCHANGED)
+   START / STOP BOT
    --------------------------------------------------------------------- */
 function startBot() {
   if (!state.connected) {
@@ -642,7 +691,7 @@ function startBot() {
   window.els.startBtn.classList.add('hidden');
   window.els.stopBtn.classList.remove('hidden');
 
-  log(`Bot started — distribution-driven auto strategy on ${state.activeSymbol}.`, 'info');
+  log(`Bot started — ${state.activeStrategy} strategy on ${state.activeSymbol}.`, 'info');
 }
 
 function stopBot() {
