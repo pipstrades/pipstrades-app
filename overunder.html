@@ -120,16 +120,16 @@
             <div class="improve-panel">
                 <div class="improve-title">🛡️ Risk Controls</div>
                 <div class="improve-row">
-                    <div class="improve-label">🛑 Session Stop-Loss<small>Halt bot if session loss reaches this % of starting balance</small></div>
+                    <div class="improve-label">🛑 Session Stop-Loss<small>Halt bot if session loss reaches this dollar amount</small></div>
                     <label class="switch"><input type="checkbox" id="stopLossToggle"><span class="slider round"></span></label>
-                    <input type="number" id="stopLossPctInput" class="improve-input" value="10" min="1" max="50">
-                    <span style="font-size:0.75rem;color:#6b7280;">%</span>
+                    <span style="font-size:0.75rem;color:#6b7280;">$</span>
+                    <input type="number" id="stopLossAmountInput" class="improve-input" value="10" min="1" step="1">
                 </div>
                 <div class="improve-row">
-                    <div class="improve-label">🎯 Session Take-Profit<small>Halt bot when session profit reaches this % of starting balance</small></div>
+                    <div class="improve-label">🎯 Session Take-Profit<small>Halt bot when session profit reaches this dollar amount</small></div>
                     <label class="switch"><input type="checkbox" id="takeProfitToggle"><span class="slider round"></span></label>
-                    <input type="number" id="takeProfitPctInput" class="improve-input" value="15" min="1" max="100">
-                    <span style="font-size:0.75rem;color:#6b7280;">%</span>
+                    <span style="font-size:0.75rem;color:#6b7280;">$</span>
+                    <input type="number" id="takeProfitAmountInput" class="improve-input" value="15" min="1" step="1">
                 </div>
                 <div class="improve-status" id="riskStatusDisplay">No risk limits active</div>
             </div>
@@ -217,12 +217,12 @@
 
   <div class="ai-barrier-row">
     <div>
-      <label class="market-label">🛑 STOP LOSS %</label>
-      <input type="number" id="aiStopLossInput" class="stake-input" value="10" min="1" max="50" style="font-size: 1rem;">
+      <label class="market-label">🛑 STOP LOSS ($)</label>
+      <input type="number" id="aiStopLossInput" class="stake-input" value="10" min="1" step="1" style="font-size: 1rem;">
     </div>
     <div>
-      <label class="market-label">🎯 TAKE PROFIT %</label>
-      <input type="number" id="aiTakeProfitInput" class="stake-input" value="15" min="1" max="100" style="font-size: 1rem;">
+      <label class="market-label">🎯 TAKE PROFIT ($)</label>
+      <input type="number" id="aiTakeProfitInput" class="stake-input" value="15" min="1" step="1" style="font-size: 1rem;">
     </div>
   </div>
 

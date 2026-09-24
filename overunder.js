@@ -56,9 +56,9 @@ let pauseTicksRemaining  = 0;
 const autoHysteresis     = 5.0;
 
 let stopLossEnabled      = false;
-let stopLossPct          = 10;
+let stopLossAmount       = 10;
 let takeProfitEnabled    = false;
-let takeProfitPct        = 15;
+let takeProfitAmount     = 15;
 
 let activeContracts      = {};
 
@@ -139,9 +139,9 @@ function initializeElements() {
         historyContainer: document.getElementById('historyContainer'),
         clearHistoryBtn: document.getElementById('clearHistoryBtn'),
         stopLossToggle: document.getElementById('stopLossToggle'),
-        stopLossPctInput: document.getElementById('stopLossPctInput'),
+        stopLossAmountInput: document.getElementById('stopLossAmountInput'),
         takeProfitToggle: document.getElementById('takeProfitToggle'),
-        takeProfitPctInput: document.getElementById('takeProfitPctInput'),
+        takeProfitAmountInput: document.getElementById('takeProfitAmountInput'),
         riskStatusDisplay: document.getElementById('riskStatusDisplay')
     };
 }
@@ -216,16 +216,18 @@ function setupEventListeners() {
     if (el('stopLossToggle')) el('stopLossToggle').addEventListener('change', function () {
         stopLossEnabled = this.checked; updateRiskUI();
     });
-    if (el('stopLossPctInput')) el('stopLossPctInput').addEventListener('input', function () {
+    if (el('stopLossAmountInput')) el('stopLossAmountInput').addEventListener('input', function () {
         let v = parseFloat(this.value);
-        if (!isNaN(v) && v > 0) stopLossPct = v;
+        if (!isNaN(v) && v > 0) stopLossAmount = v;
+        updateRiskUI();
     });
     if (el('takeProfitToggle')) el('takeProfitToggle').addEventListener('change', function () {
         takeProfitEnabled = this.checked; updateRiskUI();
     });
-    if (el('takeProfitPctInput')) el('takeProfitPctInput').addEventListener('input', function () {
+    if (el('takeProfitAmountInput')) el('takeProfitAmountInput').addEventListener('input', function () {
         let v = parseFloat(this.value);
-        if (!isNaN(v) && v > 0) takeProfitPct = v;
+        if (!isNaN(v) && v > 0) takeProfitAmount = v;
+        updateRiskUI();
     });
 }
 
@@ -282,18 +284,15 @@ function checkEntryConditions(lastDigit) {
 }
 
 function checkSessionLimits() {
-    if (sessionStartBalance === 0) return true;
     if (stopLossEnabled) {
-        let lossAmt = sessionStartBalance * (stopLossPct / 100);
-        if (totalProfit <= -lossAmt) {
-            haltBot('🛑 STOP-LOSS HIT — session loss reached ' + stopLossPct + '% ($' + lossAmt.toFixed(2) + ')');
+        if (totalProfit <= -stopLossAmount) {
+            haltBot('🛑 STOP-LOSS HIT — session loss reached $' + stopLossAmount.toFixed(2));
             return false;
         }
     }
     if (takeProfitEnabled) {
-        let profitAmt = sessionStartBalance * (takeProfitPct / 100);
-        if (totalProfit >= profitAmt) {
-            haltBot('🎯 TAKE-PROFIT HIT — session profit reached ' + takeProfitPct + '% ($' + profitAmt.toFixed(2) + ')');
+        if (totalProfit >= takeProfitAmount) {
+            haltBot('🎯 TAKE-PROFIT HIT — session profit reached $' + takeProfitAmount.toFixed(2));
             return false;
         }
     }
@@ -309,14 +308,8 @@ function haltBot(reason) {
 function updateRiskUI() {
     if (!el('riskStatusDisplay')) return;
     let lines = [];
-    if (stopLossEnabled) {
-        let lossAmt = sessionStartBalance > 0 ? sessionStartBalance * (stopLossPct / 100) : 0;
-        lines.push('🛑 Stop-loss: ' + stopLossPct + '%' + (lossAmt > 0 ? ' ($' + lossAmt.toFixed(2) + ')' : ''));
-    }
-    if (takeProfitEnabled) {
-        let profitAmt = sessionStartBalance > 0 ? sessionStartBalance * (takeProfitPct / 100) : 0;
-        lines.push('🎯 Take-profit: ' + takeProfitPct + '%' + (profitAmt > 0 ? ' ($' + profitAmt.toFixed(2) + ')' : ''));
-    }
+    if (stopLossEnabled) lines.push('🛑 Stop-loss: $' + stopLossAmount.toFixed(2));
+    if (takeProfitEnabled) lines.push('🎯 Take-profit: $' + takeProfitAmount.toFixed(2));
     el('riskStatusDisplay').textContent = lines.length ? lines.join(' | ') : 'No risk limits active';
 }
 
@@ -642,8 +635,8 @@ const aiState = {
     currentStake: 1,
     recoveryEnabled: false,
 
-    stopLossPct: 10,
-    takeProfitPct: 15,
+    stopLossAmount: 10,
+    takeProfitAmount: 15,
     sessionStartBalance: 0,
 
     trades: 0,
@@ -824,16 +817,13 @@ function aiScanAllMarkets() {
 }
 
 function aiCheckSessionLimits() {
-    if (aiState.sessionStartBalance === 0) return true;
-    const stopLossAmt = aiState.sessionStartBalance * (aiState.stopLossPct / 100);
-    const takeProfitAmt = aiState.sessionStartBalance * (aiState.takeProfitPct / 100);
-    if (aiState.pnl <= -stopLossAmt) {
-        aiLog(`🛑 AI stop-loss hit (${aiState.stopLossPct}%). Stopping AI.`);
+    if (aiState.pnl <= -aiState.stopLossAmount) {
+        aiLog(`🛑 AI stop-loss hit ($${aiState.stopLossAmount.toFixed(2)}). Stopping AI.`);
         onAiStop();
         return false;
     }
-    if (aiState.pnl >= takeProfitAmt) {
-        aiLog(`🎯 AI take-profit hit (${aiState.takeProfitPct}%). Stopping AI.`);
+    if (aiState.pnl >= aiState.takeProfitAmount) {
+        aiLog(`🎯 AI take-profit hit ($${aiState.takeProfitAmount.toFixed(2)}). Stopping AI.`);
         onAiStop();
         return false;
     }
@@ -925,8 +915,8 @@ async function onAiStart() {
     aiState.baseStake = parseFloat(aiEls.stakeInput.value) || 1;
     aiState.currentStake = aiState.baseStake;
     aiState.recoveryEnabled = aiEls.recoveryToggle.checked;
-    aiState.stopLossPct = parseFloat(aiEls.stopLossInput.value) || 10;
-    aiState.takeProfitPct = parseFloat(aiEls.takeProfitInput.value) || 15;
+    aiState.stopLossAmount = parseFloat(aiEls.stopLossInput.value) || 10;
+    aiState.takeProfitAmount = parseFloat(aiEls.takeProfitInput.value) || 15;
     aiState.sessionStartBalance = balance;
     aiState.trades = 0; aiState.wins = 0; aiState.losses = 0; aiState.pnl = 0;
     aiUpdateStats();
