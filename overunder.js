@@ -1,18 +1,5 @@
 // =======================================================
-// PIPSTRADES — OVER/UNDER BOT (simplified UI, same entry logic)
-// =======================================================
-// Uses the platform's shared OAuth session + WebSocket connection
-// instead of a manual PAT/App ID/Account ID form.
-//
-// UNCHANGED from the original bot: digit-frequency analysis,
-// least-frequent-digit selection, resolveTradeStrategy() (the
-// digit-position → contract-type decision), auto-mode hysteresis,
-// recovery/martingale staking, and session stop-loss/take-profit.
-//
-// Removed per simplification request: connection UI, UNDER2/OVER7,
-// double-confirmation, and the full 10-digit frequency table.
-// Three settings that were previously user-adjustable are now
-// fixed constants, hidden from the UI (see FIXED SETTINGS below).
+// PIPSTRADES — OVER/UNDER BOT (base, reconstructed)
 // =======================================================
 
 import { isAuthenticated, getToken, clearToken } from '/src/core/auth/tokenManager.js';
@@ -28,17 +15,9 @@ import { getAccountType } from '/src/core/state/accountPreference.js';
 
 console.log("=== OVER/UNDER BOT STARTING ===");
 
-// =======================================================
-// FIXED SETTINGS (previously adjustable, now hardcoded — not shown in UI)
-// =======================================================
-
-const minFrequencyGap     = 8.0;  // was: Min Frequency Gap input
-const maxConsecLosses     = 2;    // was: Pause after losses input
-const pauseTicksAfterLoss = 30;   // was: Pause duration input
-
-// =======================================================
-// GLOBAL STATE
-// =======================================================
+const minFrequencyGap     = 8.0;
+const maxConsecLosses     = 2;
+const pauseTicksAfterLoss = 30;
 
 let isConnected          = false;
 let isBotRunning         = false;
@@ -52,10 +31,8 @@ let activeStrategy        = 'over2';
 let currentMarket         = 'R_10';
 
 const marketDecimalFallback = {
-    'R_10':    4, 'R_25':    4, 'R_50':    4,
-    'R_75':    4, 'R_100':   4,
-    '1HZ10V':  3, '1HZ25V':  3, '1HZ50V':  3,
-    '1HZ75V':  3, '1HZ100V': 3
+    'R_10': 4, 'R_25': 4, 'R_50': 4, 'R_75': 4, 'R_100': 4,
+    '1HZ10V': 3, '1HZ25V': 3, '1HZ50V': 3, '1HZ75V': 3, '1HZ100V': 3
 };
 let currentDecimalPlaces  = marketDecimalFallback['R_10'];
 let decimalPlacesDetected = false;
@@ -66,44 +43,31 @@ let tickHistory           = [];
 let leastFrequentDigit    = null;
 let currentTickSymbol     = '';
 
-// Stats
 let totalTrades          = 0;
 let totalWins            = 0;
 let totalLosses          = 0;
 let totalProfit          = 0;
 
-// Recovery
 let recoveryEnabled      = false;
 let consecutiveLosses    = 0;
 
-// Auto Mode
 let autoModeEnabled      = false;
 let pauseTicksRemaining  = 0;
 const autoHysteresis     = 5.0;
 
-// Risk
 let stopLossEnabled      = false;
 let stopLossPct          = 10;
 let takeProfitEnabled    = false;
 let takeProfitPct        = 15;
 
-// Active contracts
 let activeContracts      = {};
 
-// =======================================================
-// MARKET & STRATEGY SETTINGS (UNDER2 / OVER7 removed)
-// =======================================================
-
 const marketNames = {
-    'R_10':    { name: 'Volatility 10'       },
-    'R_25':    { name: 'Volatility 25'       },
-    'R_50':    { name: 'Volatility 50'       },
-    'R_75':    { name: 'Volatility 75'       },
-    'R_100':   { name: 'Volatility 100'      },
-    '1HZ10V':  { name: 'Volatility 10 (1s)'  },
-    '1HZ25V':  { name: 'Volatility 25 (1s)'  },
-    '1HZ50V':  { name: 'Volatility 50 (1s)'  },
-    '1HZ75V':  { name: 'Volatility 75 (1s)'  },
+    'R_10': { name: 'Volatility 10' }, 'R_25': { name: 'Volatility 25' },
+    'R_50': { name: 'Volatility 50' }, 'R_75': { name: 'Volatility 75' },
+    'R_100': { name: 'Volatility 100' },
+    '1HZ10V': { name: 'Volatility 10 (1s)' }, '1HZ25V': { name: 'Volatility 25 (1s)' },
+    '1HZ50V': { name: 'Volatility 50 (1s)' }, '1HZ75V': { name: 'Volatility 75 (1s)' },
     '1HZ100V': { name: 'Volatility 100 (1s)' }
 };
 
@@ -114,22 +78,13 @@ const strategyConfig = {
 
 let digitFrequency = { 0:0,1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0 };
 
-// =======================================================
-// DETECT DECIMAL PLACES
-// =======================================================
-
 function detectDecimalPlaces(quoteNumber) {
-    let s   = String(quoteNumber);
+    let s = String(quoteNumber);
     let dot = s.indexOf('.');
     return dot === -1 ? 0 : s.length - dot - 1;
 }
 
-// =======================================================
-// DOM READY
-// =======================================================
-
 document.addEventListener('DOMContentLoaded', function () {
-    console.log("DOM LOADED");
     initializeElements();
     setupEventListeners();
     renderEntryDigit();
@@ -138,70 +93,62 @@ document.addEventListener('DOMContentLoaded', function () {
     updateRiskUI();
     updateUI();
     startConnection();
+    initAi();
 });
-
-// =======================================================
-// CACHE ELEMENTS
-// =======================================================
 
 function initializeElements() {
     window.els = {
-        connectionDot:        document.getElementById('connectionDot'),
+        connectionDot: document.getElementById('connectionDot'),
         connectionStatusText: document.getElementById('connectionStatusText'),
-        balanceValue:         document.getElementById('balanceValue'),
-        totalTrades:          document.getElementById('totalTrades'),
-        totalWins:            document.getElementById('totalWins'),
-        totalLosses:          document.getElementById('totalLosses'),
-        winRate:              document.getElementById('winRate'),
-        totalProfit:          document.getElementById('totalProfit'),
-        recoveryModeStat:     document.getElementById('recoveryModeStat'),
-        marketSelect:         document.getElementById('marketSelect'),
-        marketInfo:           document.getElementById('marketInfo'),
-        marketLabel:          document.getElementById('marketLabel'),
-        livePriceDisplay:     document.getElementById('livePriceDisplay'),
-        currentLastDigit:     document.getElementById('currentLastDigit'),
-        stakeInput:           document.getElementById('stakeInput'),
-        expectedProfit:       document.getElementById('expectedProfit'),
-        stakeAmount:          document.getElementById('stakeAmount'),
-        recoveryToggle:       document.getElementById('recoveryToggle'),
-        recoveryInfo:         document.getElementById('recoveryInfo'),
-        recoveryStatusText:   document.getElementById('recoveryStatusText'),
-        consecutiveLosses:    document.getElementById('consecutiveLossesCount'),
-        nextStakeAmount:      document.getElementById('nextStakeAmount'),
-        autoModeToggle:       document.getElementById('autoModeToggle'),
-        autoModeInfo:         document.getElementById('autoModeInfo'),
-        marketBiasStatus:     document.getElementById('marketBiasStatus'),
-        autoCurrentStrategy:  document.getElementById('autoCurrentStrategy'),
-        over2Strength:        document.getElementById('over2Strength'),
-        under7Strength:       document.getElementById('under7Strength'),
-        optionOver2Btn:       document.getElementById('optionOver2Btn'),
-        optionUnder7Btn:      document.getElementById('optionUnder7Btn'),
-        entryDigitNumber:     document.getElementById('entryDigitNumber'),
-        entryDigitPct:        document.getElementById('entryDigitPct'),
-        leastFrequentDigit:   document.getElementById('leastFrequentDigit'),
-        activeStrategy:       document.getElementById('activeStrategy'),
-        startBotBtn:          document.getElementById('startBotBtn'),
-        stopBotBtn:           document.getElementById('stopBotBtn'),
-        botStatus:            document.getElementById('botStatus'),
-        tradeStatusMsg:       document.getElementById('tradeStatusMsg'),
-        historyContainer:     document.getElementById('historyContainer'),
-        clearHistoryBtn:      document.getElementById('clearHistoryBtn'),
-        stopLossToggle:       document.getElementById('stopLossToggle'),
-        stopLossPctInput:     document.getElementById('stopLossPctInput'),
-        takeProfitToggle:     document.getElementById('takeProfitToggle'),
-        takeProfitPctInput:   document.getElementById('takeProfitPctInput'),
-        riskStatusDisplay:    document.getElementById('riskStatusDisplay')
+        balanceValue: document.getElementById('balanceValue'),
+        totalTrades: document.getElementById('totalTrades'),
+        totalWins: document.getElementById('totalWins'),
+        totalLosses: document.getElementById('totalLosses'),
+        winRate: document.getElementById('winRate'),
+        totalProfit: document.getElementById('totalProfit'),
+        recoveryModeStat: document.getElementById('recoveryModeStat'),
+        marketSelect: document.getElementById('marketSelect'),
+        marketInfo: document.getElementById('marketInfo'),
+        marketLabel: document.getElementById('marketLabel'),
+        livePriceDisplay: document.getElementById('livePriceDisplay'),
+        currentLastDigit: document.getElementById('currentLastDigit'),
+        stakeInput: document.getElementById('stakeInput'),
+        expectedProfit: document.getElementById('expectedProfit'),
+        stakeAmount: document.getElementById('stakeAmount'),
+        recoveryToggle: document.getElementById('recoveryToggle'),
+        recoveryInfo: document.getElementById('recoveryInfo'),
+        recoveryStatusText: document.getElementById('recoveryStatusText'),
+        consecutiveLosses: document.getElementById('consecutiveLossesCount'),
+        nextStakeAmount: document.getElementById('nextStakeAmount'),
+        autoModeToggle: document.getElementById('autoModeToggle'),
+        autoModeInfo: document.getElementById('autoModeInfo'),
+        marketBiasStatus: document.getElementById('marketBiasStatus'),
+        autoCurrentStrategy: document.getElementById('autoCurrentStrategy'),
+        over2Strength: document.getElementById('over2Strength'),
+        under7Strength: document.getElementById('under7Strength'),
+        optionOver2Btn: document.getElementById('optionOver2Btn'),
+        optionUnder7Btn: document.getElementById('optionUnder7Btn'),
+        entryDigitNumber: document.getElementById('entryDigitNumber'),
+        entryDigitPct: document.getElementById('entryDigitPct'),
+        leastFrequentDigit: document.getElementById('leastFrequentDigit'),
+        activeStrategy: document.getElementById('activeStrategy'),
+        startBotBtn: document.getElementById('startBotBtn'),
+        stopBotBtn: document.getElementById('stopBotBtn'),
+        botStatus: document.getElementById('botStatus'),
+        tradeStatusMsg: document.getElementById('tradeStatusMsg'),
+        historyContainer: document.getElementById('historyContainer'),
+        clearHistoryBtn: document.getElementById('clearHistoryBtn'),
+        stopLossToggle: document.getElementById('stopLossToggle'),
+        stopLossPctInput: document.getElementById('stopLossPctInput'),
+        takeProfitToggle: document.getElementById('takeProfitToggle'),
+        takeProfitPctInput: document.getElementById('takeProfitPctInput'),
+        riskStatusDisplay: document.getElementById('riskStatusDisplay')
     };
 }
 
 function el(id) { return window.els[id]; }
 
-// =======================================================
-// EVENT LISTENERS
-// =======================================================
-
 function setupEventListeners() {
-
     el('startBotBtn').addEventListener('click', onStartBot);
     el('stopBotBtn').addEventListener('click', onStopBot);
 
@@ -218,7 +165,7 @@ function setupEventListeners() {
         if (!isNaN(val) && val > 0) {
             baseStake = val; currentStake = val;
             el('expectedProfit').textContent = (val * 0.95).toFixed(2);
-            el('stakeAmount').textContent    = val.toFixed(2) + ' USD';
+            el('stakeAmount').textContent = val.toFixed(2) + ' USD';
             updateRecoveryUI();
         }
     });
@@ -229,17 +176,17 @@ function setupEventListeners() {
         currentMarket = newMarket;
         currentPrice = null; currentLastDigit = null;
         decimalPlacesDetected = false;
-        currentDecimalPlaces  = marketDecimalFallback[currentMarket] || 4;
+        currentDecimalPlaces = marketDecimalFallback[currentMarket] || 4;
         tickHistory = [];
         for (let i = 0; i <= 9; i++) digitFrequency[i] = 0;
-        leastFrequentDigit  = null;
+        leastFrequentDigit = null;
         pauseTicksRemaining = 0;
-        el('livePriceDisplay').innerHTML   = '—';
+        el('livePriceDisplay').innerHTML = '—';
         el('currentLastDigit').textContent = '—';
         let info = marketNames[currentMarket];
         if (info) {
             el('marketLabel').textContent = '📊 ' + info.name.toUpperCase() + ' LIVE PRICE';
-            el('marketInfo').textContent  = 'Current: ' + this.options[this.selectedIndex].text + ' — loading tick history...';
+            el('marketInfo').textContent = 'Current: ' + this.options[this.selectedIndex].text + ' — loading tick history...';
         }
         renderEntryDigit();
         if (isConnected) {
@@ -249,9 +196,9 @@ function setupEventListeners() {
 
     el('recoveryToggle').addEventListener('change', function () {
         recoveryEnabled = this.checked;
-        el('recoveryInfo').style.display     = recoveryEnabled ? 'block' : 'none';
+        el('recoveryInfo').style.display = recoveryEnabled ? 'block' : 'none';
         el('recoveryStatusText').textContent = recoveryEnabled ? 'ON' : 'OFF';
-        el('recoveryModeStat').textContent   = recoveryEnabled ? 'ON' : 'OFF';
+        el('recoveryModeStat').textContent = recoveryEnabled ? 'ON' : 'OFF';
         if (!recoveryEnabled) { consecutiveLosses = 0; currentStake = baseStake; }
         updateRecoveryUI();
     });
@@ -263,7 +210,7 @@ function setupEventListeners() {
         updateStrategyUI();
     });
 
-    el('optionOver2Btn').addEventListener('click',  function () { setStrategy('over2');  });
+    el('optionOver2Btn').addEventListener('click', function () { setStrategy('over2'); });
     el('optionUnder7Btn').addEventListener('click', function () { setStrategy('under7'); });
 
     if (el('stopLossToggle')) el('stopLossToggle').addEventListener('change', function () {
@@ -282,10 +229,6 @@ function setupEventListeners() {
     });
 }
 
-// =======================================================
-// STRATEGY
-// =======================================================
-
 function setStrategy(strategy) {
     if (autoModeEnabled) return;
     activeStrategy = strategy;
@@ -293,32 +236,24 @@ function setStrategy(strategy) {
 }
 
 function updateStrategyUI() {
-    ['optionOver2Btn','optionUnder7Btn'].forEach(function (id) {
-        el(id).classList.remove('active');
-    });
-    let map = { over2:'optionOver2Btn', under7:'optionUnder7Btn' };
+    ['optionOver2Btn', 'optionUnder7Btn'].forEach(function (id) { el(id).classList.remove('active'); });
+    let map = { over2: 'optionOver2Btn', under7: 'optionUnder7Btn' };
     if (map[activeStrategy]) el(map[activeStrategy]).classList.add('active');
     let cfg = strategyConfig[activeStrategy];
-    if (cfg) {
-        el('activeStrategy').textContent = cfg.label;
-    }
+    if (cfg) el('activeStrategy').textContent = cfg.label;
 }
-
-// =======================================================
-// AUTO MODE — 100-tick window + hysteresis (UNCHANGED)
-// =======================================================
 
 function updateAutoMode() {
     if (!autoModeEnabled || tickHistory.length < 20) return;
-    let recent    = tickHistory.slice(-100);
-    let over2cnt  = recent.filter(function (d) { return d > 2; }).length;
+    let recent = tickHistory.slice(-100);
+    let over2cnt = recent.filter(function (d) { return d > 2; }).length;
     let under7cnt = recent.filter(function (d) { return d < 7; }).length;
-    let over2pct  = (over2cnt  / recent.length) * 100;
+    let over2pct = (over2cnt / recent.length) * 100;
     let under7pct = (under7cnt / recent.length) * 100;
-    el('over2Strength').textContent  = over2pct.toFixed(1)  + '%';
+    el('over2Strength').textContent = over2pct.toFixed(1) + '%';
     el('under7Strength').textContent = under7pct.toFixed(1) + '%';
     let newStrategy = activeStrategy;
-    let diff        = Math.abs(over2pct - under7pct);
+    let diff = Math.abs(over2pct - under7pct);
     if (over2pct > under7pct && diff >= autoHysteresis) {
         newStrategy = 'over2';
         el('marketBiasStatus').textContent = 'High (OVER 2 favoured +' + diff.toFixed(1) + '%)';
@@ -336,32 +271,15 @@ function updateAutoMode() {
     }
 }
 
-// =======================================================
-// ENTRY FILTER (UNCHANGED except double-confirmation removed)
-// =======================================================
-
 function checkEntryConditions(lastDigit) {
     if (tickHistory.length < 20) return { allowed: false };
     if (lastDigit !== leastFrequentDigit) return { allowed: false };
-
-    // 1. Minimum frequency gap (fixed at 8%, hidden from UI)
     let total = tickHistory.length;
-    let pct   = (digitFrequency[leastFrequentDigit] / total) * 100;
-    if (pct >= minFrequencyGap) {
-        return { allowed: false };
-    }
-
-    // 2. Consecutive loss pause (fixed: 2 losses / 30 ticks, hidden from UI)
-    if (pauseTicksRemaining > 0) {
-        return { allowed: false };
-    }
-
+    let pct = (digitFrequency[leastFrequentDigit] / total) * 100;
+    if (pct >= minFrequencyGap) return { allowed: false };
+    if (pauseTicksRemaining > 0) return { allowed: false };
     return { allowed: true };
 }
-
-// =======================================================
-// SESSION RISK CHECKS (UNCHANGED)
-// =======================================================
 
 function checkSessionLimits() {
     if (sessionStartBalance === 0) return true;
@@ -388,10 +306,6 @@ function haltBot(reason) {
     updateStatus(reason); updateUI(); updateRiskUI();
 }
 
-// =======================================================
-// RISK UI
-// =======================================================
-
 function updateRiskUI() {
     if (!el('riskStatusDisplay')) return;
     let lines = [];
@@ -406,14 +320,10 @@ function updateRiskUI() {
     el('riskStatusDisplay').textContent = lines.length ? lines.join(' | ') : 'No risk limits active';
 }
 
-// =======================================================
-// RECOVERY (UNCHANGED)
-// =======================================================
-
 function updateRecoveryUI() {
     if (!recoveryEnabled) return;
     el('consecutiveLosses').textContent = consecutiveLosses;
-    el('nextStakeAmount').textContent   = '$' + currentStake.toFixed(2);
+    el('nextStakeAmount').textContent = '$' + currentStake.toFixed(2);
 }
 
 function onTradeWin(profit) {
@@ -425,46 +335,31 @@ function onTradeWin(profit) {
 
 function onTradeLoss(loss) {
     totalLosses++; totalProfit -= loss; consecutiveLosses++;
-    if (consecutiveLosses >= maxConsecLosses) {
-        pauseTicksRemaining = pauseTicksAfterLoss;
-    }
+    if (consecutiveLosses >= maxConsecLosses) pauseTicksRemaining = pauseTicksAfterLoss;
     if (recoveryEnabled) currentStake = parseFloat((currentStake * 2).toFixed(2));
     updateStatsUI(); updateRecoveryUI(); updateStakeDisplay(); updateRiskUI();
 }
 
 function updateStakeDisplay() {
-    el('stakeInput').value           = currentStake.toFixed(2);
-    el('stakeAmount').textContent    = currentStake.toFixed(2) + ' USD';
+    el('stakeInput').value = currentStake.toFixed(2);
+    el('stakeAmount').textContent = currentStake.toFixed(2) + ' USD';
     el('expectedProfit').textContent = (currentStake * 0.95).toFixed(2);
 }
 
-// =======================================================
-// STATS UI
-// =======================================================
-
 function updateStatsUI() {
     totalTrades = totalWins + totalLosses;
-    let rate    = totalTrades > 0 ? ((totalWins / totalTrades) * 100).toFixed(1) : '0';
+    let rate = totalTrades > 0 ? ((totalWins / totalTrades) * 100).toFixed(1) : '0';
     el('totalTrades').textContent = totalTrades;
-    el('totalWins').textContent   = totalWins;
+    el('totalWins').textContent = totalWins;
     el('totalLosses').textContent = totalLosses;
-    el('winRate').textContent     = rate + '%';
+    el('winRate').textContent = rate + '%';
     let p = el('totalProfit');
     p.textContent = (totalProfit >= 0 ? '+' : '') + '$' + totalProfit.toFixed(2);
     p.style.color = totalProfit >= 0 ? '#facc15' : '#ef4444';
 }
 
-// =======================================================
-// CONNECTION — via platform OAuth session + shared wsClient
-// (replaces the old PAT / App ID / Account ID form entirely)
-// =======================================================
-
 async function startConnection() {
-    if (!isAuthenticated()) {
-        window.location.href = '/';
-        return;
-    }
-
+    if (!isAuthenticated()) { window.location.href = '/'; return; }
     try {
         const token = getToken();
         await wsConnect(token, getAccountType());
@@ -488,51 +383,23 @@ async function startConnection() {
     }
 }
 
-// =======================================================
-// PRELOAD TICK HISTORY — fetches Deriv's own recent tick history
-// on connect (and on market change) so the digit distribution and
-// entry digit are stable immediately, instead of starting at 0 and
-// drifting as live ticks slowly accumulate.
-// =======================================================
-
 async function preloadTickHistory() {
     try {
-        let response = await wsSendRequest({
-            ticks_history: currentMarket,
-            end: 'latest',
-            count: 150,
-            style: 'ticks'
-        });
-
+        let response = await wsSendRequest({ ticks_history: currentMarket, end: 'latest', count: 150, style: 'ticks' });
         let prices = response.history.prices;
         let pipSize = response.pip_size;
-
-        if (typeof pipSize === 'number') {
-            currentDecimalPlaces = pipSize;
-            decimalPlacesDetected = true;
-        }
-
-        tickHistory = prices.map(function (price) {
-            return parseInt(getLastDigit(price), 10);
-        }).filter(function (d) { return !isNaN(d); });
-
-        if (tickHistory.length > 200) {
-            tickHistory = tickHistory.slice(-200);
-        }
-
+        if (typeof pipSize === 'number') { currentDecimalPlaces = pipSize; decimalPlacesDetected = true; }
+        tickHistory = prices.map(function (price) { return parseInt(getLastDigit(price), 10); }).filter(function (d) { return !isNaN(d); });
+        if (tickHistory.length > 200) tickHistory = tickHistory.slice(-200);
         if (prices.length > 0) {
             currentPrice = prices[prices.length - 1];
             currentLastDigit = tickHistory[tickHistory.length - 1];
         }
-
         updateDigitAnalysis();
         renderEntryDigit();
         updateLivePriceDisplay();
-
-        el('marketInfo').textContent = 'Current: '
-            + el('marketSelect').options[el('marketSelect').selectedIndex].text
+        el('marketInfo').textContent = 'Current: ' + el('marketSelect').options[el('marketSelect').selectedIndex].text
             + ' — ' + currentDecimalPlaces + ' decimal places (history loaded: ' + tickHistory.length + ' ticks)';
-
         updateStatus('✅ Loaded ' + tickHistory.length + ' recent ticks from Deriv — entry digit ready.');
     } catch (err) {
         console.error('Tick history preload failed:', err);
@@ -544,10 +411,6 @@ function subscribeTicks() {
     wsSubscribeTicks(currentMarket);
     currentTickSymbol = currentMarket;
 }
-
-// =======================================================
-// EVENT BUS LISTENERS (replaces old raw ws.onmessage routing)
-// =======================================================
 
 busOn('balance', (bal) => {
     balance = parseFloat(bal.balance);
@@ -563,8 +426,7 @@ busOn('tick', (tick) => {
         let detected = detectDecimalPlaces(price);
         if (detected > 0) {
             currentDecimalPlaces = detected; decimalPlacesDetected = true;
-            el('marketInfo').textContent = 'Current: '
-                + el('marketSelect').options[el('marketSelect').selectedIndex].text
+            el('marketInfo').textContent = 'Current: ' + el('marketSelect').options[el('marketSelect').selectedIndex].text
                 + ' — ' + currentDecimalPlaces + ' decimal places';
         }
     }
@@ -574,9 +436,7 @@ busOn('tick', (tick) => {
     tickHistory.push(lastDigit);
     if (tickHistory.length > 200) tickHistory.shift();
 
-    if (pauseTicksRemaining > 0) {
-        pauseTicksRemaining--;
-    }
+    if (pauseTicksRemaining > 0) pauseTicksRemaining--;
 
     updateDigitAnalysis();
     renderEntryDigit();
@@ -593,8 +453,8 @@ busOn('tick', (tick) => {
 busOn('contractUpdate', (poc) => {
     let contractId = poc.contract_id;
     if ((poc.is_sold || poc.status === 'won' || poc.status === 'lost') && activeContracts[contractId]) {
-        let stake  = activeContracts[contractId].stake;
-        let strat  = activeContracts[contractId].strategy;
+        let stake = activeContracts[contractId].stake;
+        let strat = activeContracts[contractId].strategy;
         let profit = parseFloat(poc.profit || 0);
         delete activeContracts[contractId];
         if (poc.status === 'won') {
@@ -611,9 +471,8 @@ busOn('contractUpdate', (poc) => {
     }
 });
 
-busOn('connection:error', (err) => {
-    console.error('Connection error:', err);
-    updateStatus('⚠️ ' + (err.message || 'Connection error'));
+busOn('connection:error', () => {
+    updateStatus('⚠️ Connection error');
 });
 
 busOn('connection:close', () => {
@@ -623,40 +482,11 @@ busOn('connection:close', () => {
     updateUI();
 });
 
-// =======================================================
-// RESOLVE TRADE STRATEGY BASED ON ENTRY DIGIT POSITION
-// =======================================================
-// UNCHANGED — this is the core entry logic. The entry digit
-// (least frequent) tells us where the market has NOT been
-// going. We use its position on the 0–9 number line to pick
-// the contract most likely to win:
-//
-//   Digit 0–4  → market has skewed HIGH (low digits absent)
-//               → trade UNDER 7 (wins on 0–6, 70% chance)
-//
-//   Digit 5    → neutral midpoint
-//               → keep the manually selected strategy
-//
-//   Digit 6–9  → market has skewed LOW (high digits absent)
-//               → trade OVER 2 (wins on 3–9, 70% chance)
-//
-// This overrides autoMode and manual strategy selection
-// when the entry digit is in range 0–4 or 6–9.
-// =======================================================
-
 function resolveTradeStrategy(entryDigit) {
-    if (entryDigit >= 0 && entryDigit <= 4) {
-        return 'under7';
-    } else if (entryDigit >= 6 && entryDigit <= 9) {
-        return 'over2';
-    } else {
-        return activeStrategy;
-    }
+    if (entryDigit >= 0 && entryDigit <= 4) return 'under7';
+    else if (entryDigit >= 6 && entryDigit <= 9) return 'over2';
+    else return activeStrategy;
 }
-
-// =======================================================
-// EXECUTE TRADE (UNCHANGED)
-// =======================================================
 
 async function executeTrade() {
     try {
@@ -672,7 +502,6 @@ async function executeTrade() {
         });
         let buy = await wsSendRequest({ buy: proposal.proposal.id, price: tradeStake });
         let contractId = buy.buy.contract_id;
-        console.log("BUY SUCCESS:", contractId, "| Strategy:", resolvedStrategy, "| Entry digit:", leastFrequentDigit);
         activeContracts[contractId] = { stake: tradeStake, strategy: tradeStrategy };
         wsSend({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 });
         el('activeStrategy').textContent = cfg.label + ' (digit ' + leastFrequentDigit + ')';
@@ -684,54 +513,36 @@ async function executeTrade() {
     }
 }
 
-// =======================================================
-// DIGIT ANALYSIS (UNCHANGED)
-// =======================================================
-
 function updateDigitAnalysis() {
     for (let i = 0; i <= 9; i++) digitFrequency[i] = 0;
-    for (let d of tickHistory)   digitFrequency[d]++;
+    for (let d of tickHistory) digitFrequency[d]++;
     let min = Infinity, least = 0;
     for (let d = 0; d <= 9; d++) { if (digitFrequency[d] < min) { min = digitFrequency[d]; least = d; } }
     leastFrequentDigit = least;
 }
 
-// =======================================================
-// RENDER ENTRY DIGIT (replaces old full 10-digit grid)
-// =======================================================
-
 function renderEntryDigit() {
     let total = tickHistory.length;
-
     if (total === 0) {
         el('entryDigitNumber').textContent = '—';
         el('entryDigitPct').textContent = 'Waiting for ticks...';
         el('leastFrequentDigit').textContent = '⏳ Waiting for ticks...';
         return;
     }
-
     if (total < 20) {
         el('entryDigitNumber').textContent = leastFrequentDigit ?? '—';
         el('entryDigitPct').textContent = 'Building history... (' + total + '/20 ticks)';
         el('leastFrequentDigit').textContent = '⏳ Building history... (' + total + '/20 ticks)';
         return;
     }
-
     let pct = (digitFrequency[leastFrequentDigit] / total) * 100;
     let ready = pct < minFrequencyGap;
-
     el('entryDigitNumber').textContent = leastFrequentDigit;
     el('entryDigitPct').textContent = pct.toFixed(1) + '% frequency';
-
     let col = ready ? '#00e676' : '#facc15';
     el('leastFrequentDigit').innerHTML = (ready ? '✅' : '⏸') + ' Digit <strong style="color:' + col + ';font-size:1.1rem;">'
-        + leastFrequentDigit + '</strong> = ' + pct.toFixed(1) + '% — '
-        + (ready ? 'ENTRY READY' : 'waiting for lower frequency');
+        + leastFrequentDigit + '</strong> = ' + pct.toFixed(1) + '% — ' + (ready ? 'ENTRY READY' : 'waiting for lower frequency');
 }
-
-// =======================================================
-// LIVE PRICE DISPLAY (UNCHANGED)
-// =======================================================
 
 function updateLivePriceDisplay() {
     if (currentPrice === null) return;
@@ -748,16 +559,12 @@ function getLastDigit(price) {
     return str.charAt(str.length - 1);
 }
 
-// =======================================================
-// TRADE HISTORY (UNCHANGED)
-// =======================================================
-
 function addHistoryItem(isWin, stake, profitLoss, contractId, strategy) {
     let container = el('historyContainer');
     let placeholder = container.querySelector('div[style]');
     if (placeholder && placeholder.textContent.trim() === 'No trades yet') placeholder.remove();
     let label = strategyConfig[strategy] ? strategyConfig[strategy].label : strategy;
-    let time  = new Date().toLocaleTimeString();
+    let time = new Date().toLocaleTimeString();
     let badge = isWin
         ? '<span class="win-badge">✅ WIN +$' + Math.abs(profitLoss).toFixed(2) + '</span>'
         : '<span class="loss-badge">❌ LOSS -$' + stake.toFixed(2) + '</span>';
@@ -770,11 +577,7 @@ function addHistoryItem(isWin, stake, profitLoss, contractId, strategy) {
     container.insertBefore(item, container.firstChild);
 }
 
-// =======================================================
-// STATUS / UI
-// =======================================================
-
-function updateStatus(msg) { console.log("STATUS:", msg); if (el('tradeStatusMsg')) el('tradeStatusMsg').textContent = msg; }
+function updateStatus(msg) { if (el('tradeStatusMsg')) el('tradeStatusMsg').textContent = msg; }
 
 function setBotStatus(text, cls) {
     let b = el('botStatus'); if (!b) return;
@@ -783,12 +586,8 @@ function setBotStatus(text, cls) {
 
 function updateUI() {
     el('startBotBtn').disabled = !isConnected || isBotRunning;
-    el('stopBotBtn').disabled  = !isBotRunning;
+    el('stopBotBtn').disabled = !isBotRunning;
 }
-
-// =======================================================
-// START / STOP BOT (UNCHANGED)
-// =======================================================
 
 function onStartBot() {
     if (!isConnected) { updateStatus('❌ Not connected'); return; }
@@ -805,4 +604,351 @@ function onStopBot() {
     isBotRunning = false; isProcessingTrade = false; pauseTicksRemaining = 0;
     setBotStatus('⏹ Bot Status: STOPPED', 'stopped');
     updateStatus('⏹️ BOT STOPPED'); updateUI();
+}
+
+
+// =========================================================================
+// AI MARKET SCANNER — fully independent session, runs alongside the
+// manual controls above. Reuses the EXACT SAME entry-logic building
+// blocks already established for this bot (digit-frequency counting,
+// the fixed 8% minimum-frequency-gap threshold, the fixed
+// 2-losses/30-ticks pause rule) — just applied per-market instead of to
+// one selected market, and gated on a barrier the USER chooses (digit +
+// OVER/UNDER) instead of an auto-picked least-frequent digit.
+//
+// "Avoids bad markets": a market only becomes a trade candidate once the
+// user's chosen barrier digit is currently trading BELOW the same 8%
+// frequency threshold used elsewhere on this platform — the exact same
+// statistical reasoning the manual Over/Under logic already relies on,
+// just checked across every market instead of one.
+// =========================================================================
+
+const AI_ALL_MARKETS = [
+    'R_10', '1HZ10V', 'R_25', '1HZ25V', 'R_50', '1HZ50V',
+    'R_75', '1HZ75V', 'R_100', '1HZ100V'
+];
+
+const aiState = {
+    running: false,
+    tradeInFlight: false,
+    connected: false,
+
+    barrierDigit: 2,
+    barrierDirection: 'over', // 'over' | 'under'
+
+    marketStates: new Map(), // symbol -> { tickHistory, digitFrequency, pauseTicksRemaining, consecutiveLosses }
+
+    baseStake: 1,
+    currentStake: 1,
+    recoveryEnabled: false,
+
+    stopLossPct: 10,
+    takeProfitPct: 15,
+    sessionStartBalance: 0,
+
+    trades: 0,
+    wins: 0,
+    losses: 0,
+    pnl: 0,
+
+    activeContracts: {} // contractId -> { stake, market }
+};
+
+let aiEls = {};
+
+function initAi() {
+    aiEls = {
+        fab: document.getElementById('aiFab'),
+        fabDot: document.getElementById('aiFabDot'),
+        backdrop: document.getElementById('aiBackdrop'),
+        panel: document.getElementById('aiPanel'),
+        closeBtn: document.getElementById('aiCloseBtn'),
+        directionSelect: document.getElementById('aiDirectionSelect'),
+        digitSelect: document.getElementById('aiDigitSelect'),
+        stakeInput: document.getElementById('aiStakeInput'),
+        recoveryToggle: document.getElementById('aiRecoveryToggle'),
+        stopLossInput: document.getElementById('aiStopLossInput'),
+        takeProfitInput: document.getElementById('aiTakeProfitInput'),
+        statTrades: document.getElementById('aiStatTrades'),
+        statWins: document.getElementById('aiStatWins'),
+        statLosses: document.getElementById('aiStatLosses'),
+        statPnl: document.getElementById('aiStatPnl'),
+        scanLine: document.getElementById('aiScanLine'),
+        startBtn: document.getElementById('aiStartBtn'),
+        stopBtn: document.getElementById('aiStopBtn')
+    };
+
+    aiEls.fab.addEventListener('click', () => openAiPanel());
+    aiEls.closeBtn.addEventListener('click', () => closeAiPanel());
+    aiEls.backdrop.addEventListener('click', () => closeAiPanel());
+
+    aiEls.directionSelect.addEventListener('change', (e) => { aiState.barrierDirection = e.target.value; });
+    aiEls.digitSelect.addEventListener('change', (e) => { aiState.barrierDigit = parseInt(e.target.value, 10); });
+
+    aiEls.recoveryToggle.addEventListener('change', (e) => { aiState.recoveryEnabled = e.target.checked; });
+
+    aiEls.startBtn.addEventListener('click', onAiStart);
+    aiEls.stopBtn.addEventListener('click', onAiStop);
+
+    // The AI connection reuses the SAME shared wsClient connection as the
+    // manual section — it just adds its own tick subscriptions on top.
+    busOn('connection:close', () => {
+        aiState.connected = false;
+        if (aiState.running) onAiStop();
+        aiEls.startBtn.disabled = true;
+    });
+}
+
+function openAiPanel() {
+    aiEls.backdrop.classList.add('open');
+    aiEls.panel.classList.add('open');
+}
+function closeAiPanel() {
+    aiEls.backdrop.classList.remove('open');
+    aiEls.panel.classList.remove('open');
+}
+
+// Called once the manual section's shared connection is up — the AI
+// scanner rides on that same WebSocket, it just needs its own market
+// history preloaded once the page knows it's connected.
+busOn('connection:open', () => {
+    aiState.connected = true;
+    aiEls.startBtn.disabled = false;
+});
+
+// wsClient may not emit 'connection:open' if it already fired before
+// initAi() ran — fall back to checking isConnected shortly after load.
+setTimeout(() => {
+    if (isConnected) {
+        aiState.connected = true;
+        if (aiEls.startBtn) aiEls.startBtn.disabled = false;
+    }
+}, 3000);
+
+function createAiMarketState() {
+    return {
+        tickHistory: [],
+        digitFrequency: { 0:0,1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0 },
+        pauseTicksRemaining: 0,
+        decimalPlaces: 4,
+        decimalPlacesDetected: false
+    };
+}
+
+async function aiPreloadMarket(symbol) {
+    const ms = createAiMarketState();
+    aiState.marketStates.set(symbol, ms);
+    ms.decimalPlaces = marketDecimalFallback[symbol] || 4;
+
+    try {
+        const response = await wsSendRequest({ ticks_history: symbol, end: 'latest', count: 150, style: 'ticks' });
+        const prices = response.history.prices;
+        if (typeof response.pip_size === 'number') {
+            ms.decimalPlaces = response.pip_size;
+            ms.decimalPlacesDetected = true;
+        }
+        prices.forEach((price) => {
+            const digit = aiGetLastDigit(price, ms.decimalPlaces);
+            ms.tickHistory.push(digit);
+            if (ms.tickHistory.length > 200) ms.tickHistory.shift();
+        });
+        aiRecalculateFrequency(ms);
+    } catch (err) {
+        console.error(`AI: tick history preload failed for ${symbol}:`, err);
+    }
+}
+
+function aiGetLastDigit(price, decimals) {
+    const str = Number(price).toFixed(decimals).replace(/\./g, '');
+    return parseInt(str.charAt(str.length - 1), 10);
+}
+
+function aiRecalculateFrequency(ms) {
+    for (let i = 0; i <= 9; i++) ms.digitFrequency[i] = 0;
+    for (const d of ms.tickHistory) ms.digitFrequency[d]++;
+}
+
+// Reuses the SAME fixed 8% frequency-gap threshold already established
+// for this bot's manual logic — a market is a "good" candidate only when
+// the user's chosen barrier digit is currently below that threshold here.
+function aiEvaluateMarket(symbol, ms) {
+    if (ms.tickHistory.length < 20) return { ready: false, reason: 'collecting' };
+    if (ms.pauseTicksRemaining > 0) return { ready: false, reason: 'paused' };
+
+    const total = ms.tickHistory.length;
+    const pct = (ms.digitFrequency[aiState.barrierDigit] / total) * 100;
+
+    if (pct >= minFrequencyGap) return { ready: false, reason: 'above-threshold', pct };
+
+    return { ready: true, pct };
+}
+
+busOn('tick', (tick) => {
+    if (!aiState.running) return;
+    const ms = aiState.marketStates.get(tick.symbol);
+    if (!ms) return;
+
+    const digit = aiGetLastDigit(tick.quote, ms.decimalPlaces);
+    ms.tickHistory.push(digit);
+    if (ms.tickHistory.length > 200) ms.tickHistory.shift();
+    aiRecalculateFrequency(ms);
+
+    if (ms.pauseTicksRemaining > 0) ms.pauseTicksRemaining--;
+
+    aiScanAllMarkets();
+});
+
+function aiScanAllMarkets() {
+    if (!aiState.running || aiState.tradeInFlight) return;
+    if (!aiCheckSessionLimits()) return;
+
+    let bestSymbol = null;
+    let bestPct = Infinity;
+
+    for (const symbol of AI_ALL_MARKETS) {
+        const ms = aiState.marketStates.get(symbol);
+        if (!ms) continue;
+        const result = aiEvaluateMarket(symbol, ms);
+        if (result.ready && result.pct < bestPct) {
+            bestPct = result.pct;
+            bestSymbol = symbol;
+        }
+    }
+
+    if (bestSymbol) {
+        aiEls.scanLine.innerHTML = `Best candidate: <strong>${bestSymbol}</strong> — digit ${aiState.barrierDigit} at ${bestPct.toFixed(1)}% (below ${minFrequencyGap}% threshold). Firing trade…`;
+        aiExecuteTrade(bestSymbol);
+    } else {
+        aiEls.scanLine.textContent = `Scanning ${AI_ALL_MARKETS.length} markets — no market currently has digit ${aiState.barrierDigit} below ${minFrequencyGap}%.`;
+    }
+}
+
+function aiCheckSessionLimits() {
+    if (aiState.sessionStartBalance === 0) return true;
+    const stopLossAmt = aiState.sessionStartBalance * (aiState.stopLossPct / 100);
+    const takeProfitAmt = aiState.sessionStartBalance * (aiState.takeProfitPct / 100);
+    if (aiState.pnl <= -stopLossAmt) {
+        aiLog(`🛑 AI stop-loss hit (${aiState.stopLossPct}%). Stopping AI.`);
+        onAiStop();
+        return false;
+    }
+    if (aiState.pnl >= takeProfitAmt) {
+        aiLog(`🎯 AI take-profit hit (${aiState.takeProfitPct}%). Stopping AI.`);
+        onAiStop();
+        return false;
+    }
+    return true;
+}
+
+async function aiExecuteTrade(symbol) {
+    aiState.tradeInFlight = true;
+    const ms = aiState.marketStates.get(symbol);
+    const contractType = aiState.barrierDirection === 'over' ? 'DIGITOVER' : 'DIGITUNDER';
+    const stake = aiState.currentStake;
+
+    try {
+        const proposal = await wsSendRequest({
+            proposal: 1, amount: stake, basis: 'stake',
+            contract_type: contractType, currency: 'USD',
+            duration: 1, duration_unit: 't', barrier: String(aiState.barrierDigit),
+            underlying_symbol: symbol
+        });
+        const buy = await wsSendRequest({ buy: proposal.proposal.id, price: stake });
+        const contractId = buy.buy.contract_id;
+        aiState.activeContracts[contractId] = { stake, market: symbol };
+        wsSend({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 });
+        aiLog(`[AI] Trade placed on ${symbol} — ${contractType.replace('DIGIT', '')} ${aiState.barrierDigit} @ $${stake.toFixed(2)} (#${contractId})`);
+    } catch (err) {
+        console.error('AI trade error:', err);
+        aiLog(`[AI] Trade failed on ${symbol}: ${err.message}`);
+        aiState.tradeInFlight = false;
+    }
+}
+
+busOn('contractUpdate', (poc) => {
+    const contractId = poc.contract_id;
+    const meta = aiState.activeContracts[contractId];
+    if (!meta) return; // not an AI contract — the manual handler already covers its own
+    if (!(poc.is_sold || poc.status === 'won' || poc.status === 'lost')) return;
+
+    const profit = parseFloat(poc.profit || 0);
+    delete aiState.activeContracts[contractId];
+    aiState.tradeInFlight = false;
+    aiState.trades++;
+    aiState.pnl += profit;
+
+    const ms = aiState.marketStates.get(meta.market);
+
+    if (poc.status === 'won') {
+        aiState.wins++;
+        if (ms) { ms.pauseTicksRemaining = 0; }
+        if (aiState.recoveryEnabled) aiState.currentStake = aiState.baseStake;
+        aiLog(`[AI] WIN +$${profit.toFixed(2)} on ${meta.market} — session P/L $${aiState.pnl.toFixed(2)}`);
+        addHistoryItem(true, meta.stake, profit, contractId, 'ai-' + meta.market);
+    } else {
+        aiState.losses++;
+        if (ms) {
+            ms.consecutiveLossesAi = (ms.consecutiveLossesAi || 0) + 1;
+            if (ms.consecutiveLossesAi >= maxConsecLosses) {
+                ms.pauseTicksRemaining = pauseTicksAfterLoss;
+                ms.consecutiveLossesAi = 0;
+            }
+        }
+        if (aiState.recoveryEnabled) aiState.currentStake = parseFloat((aiState.currentStake * 2).toFixed(2));
+        aiLog(`[AI] LOSS -$${meta.stake.toFixed(2)} on ${meta.market} — session P/L $${aiState.pnl.toFixed(2)}`);
+        addHistoryItem(false, meta.stake, -meta.stake, contractId, 'ai-' + meta.market);
+    }
+
+    aiUpdateStats();
+    aiScanAllMarkets();
+});
+
+function aiLog(msg) {
+    console.log(msg);
+    if (aiEls.scanLine) aiEls.scanLine.innerHTML = msg;
+}
+
+function aiUpdateStats() {
+    aiEls.statTrades.textContent = aiState.trades;
+    aiEls.statWins.textContent = aiState.wins;
+    aiEls.statLosses.textContent = aiState.losses;
+    aiEls.statPnl.textContent = aiState.pnl.toFixed(2);
+    aiEls.statPnl.style.color = aiState.pnl >= 0 ? '#39ff14' : '#ff2d55';
+}
+
+async function onAiStart() {
+    if (!isConnected) {
+        aiLog('❌ Not connected yet.');
+        return;
+    }
+
+    aiState.baseStake = parseFloat(aiEls.stakeInput.value) || 1;
+    aiState.currentStake = aiState.baseStake;
+    aiState.recoveryEnabled = aiEls.recoveryToggle.checked;
+    aiState.stopLossPct = parseFloat(aiEls.stopLossInput.value) || 10;
+    aiState.takeProfitPct = parseFloat(aiEls.takeProfitInput.value) || 15;
+    aiState.sessionStartBalance = balance;
+    aiState.trades = 0; aiState.wins = 0; aiState.losses = 0; aiState.pnl = 0;
+    aiUpdateStats();
+
+    aiEls.startBtn.disabled = true;
+    aiEls.stopBtn.disabled = false;
+    aiEls.fabDot.classList.add('running');
+    aiEls.scanLine.textContent = `Loading history for ${AI_ALL_MARKETS.length} markets…`;
+
+    await Promise.all(AI_ALL_MARKETS.map((symbol) => aiPreloadMarket(symbol)));
+    AI_ALL_MARKETS.forEach((symbol) => wsSend({ ticks: symbol, subscribe: 1 }));
+
+    aiState.running = true;
+    aiEls.scanLine.textContent = `Scanning ${AI_ALL_MARKETS.length} markets for digit ${aiState.barrierDigit} ${aiState.barrierDirection === 'over' ? 'OVER' : 'UNDER'} opportunities…`;
+    aiScanAllMarkets();
+}
+
+function onAiStop() {
+    aiState.running = false;
+    aiState.tradeInFlight = false;
+    aiEls.startBtn.disabled = !isConnected;
+    aiEls.stopBtn.disabled = true;
+    aiEls.fabDot.classList.remove('running');
+    aiEls.scanLine.textContent = 'AI scanner stopped.';
 }
