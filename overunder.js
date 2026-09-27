@@ -830,23 +830,41 @@ function aiCheckSessionLimits() {
     return true;
 }
 
-// Auto-direction resolver for the AI scanner's new combined mode — reuses
-// the SAME low/high digit-range convention already established in this
-// bot's manual resolveTradeStrategy(): low digits lean UNDER, high digits
-// lean OVER. Only used when the user picks "AUTO" instead of a fixed
-// OVER or UNDER — the fixed options are untouched.
-function aiResolveAutoDirection(barrierDigit) {
-    if (barrierDigit <= 4) return 'under';
-    if (barrierDigit >= 6) return 'over';
-    return 'under'; // digit 5: UNDER5 covers 5 digits (0-4) vs OVER5's 4 digits (6-9)
+// Auto-direction resolver for the AI scanner's combined mode. This now
+// looks at the SPECIFIC MARKET's own recent tick history (the same
+// rolling window already being scanned) and compares how often digits
+// landed ABOVE the barrier vs BELOW it — i.e. which of OVER/UNDER would
+// actually have won more often recently, in THIS market. This varies
+// market to market and drifts as new ticks arrive, unlike a fixed rule
+// based only on the barrier digit's value.
+function aiComputeDirectionBias(ms, barrierDigit) {
+    let aboveCount = 0;
+    let belowCount = 0;
+    for (const d of ms.tickHistory) {
+        if (d > barrierDigit) aboveCount++;
+        else if (d < barrierDigit) belowCount++;
+        // d === barrierDigit counts toward neither — that outcome loses
+        // both OVER and UNDER contracts alike.
+    }
+
+    if (aboveCount > belowCount) return { direction: 'over', aboveCount, belowCount };
+    if (belowCount > aboveCount) return { direction: 'under', aboveCount, belowCount };
+
+    // Exact tie — fall back to the same low/high digit-range convention
+    // already established in this bot's manual resolveTradeStrategy().
+    const tiebreak = barrierDigit <= 4 ? 'under' : (barrierDigit >= 6 ? 'over' : 'under');
+    return { direction: tiebreak, aboveCount, belowCount, tiebreak: true };
 }
 
 async function aiExecuteTrade(symbol) {
     aiState.tradeInFlight = true;
     const ms = aiState.marketStates.get(symbol);
-    const resolvedDirection = aiState.barrierDirection === 'auto'
-        ? aiResolveAutoDirection(aiState.barrierDigit)
-        : aiState.barrierDirection;
+    let resolvedDirection = aiState.barrierDirection;
+    let biasInfo = null;
+    if (aiState.barrierDirection === 'auto') {
+        biasInfo = aiComputeDirectionBias(ms, aiState.barrierDigit);
+        resolvedDirection = biasInfo.direction;
+    }
     const contractType = resolvedDirection === 'over' ? 'DIGITOVER' : 'DIGITUNDER';
     const stake = aiState.currentStake;
 
@@ -861,7 +879,9 @@ async function aiExecuteTrade(symbol) {
         const contractId = buy.buy.contract_id;
         aiState.activeContracts[contractId] = { stake, market: symbol };
         wsSend({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 });
-        const directionTag = aiState.barrierDirection === 'auto' ? `AUTO→${resolvedDirection.toUpperCase()}` : contractType.replace('DIGIT', '');
+        const directionTag = biasInfo
+            ? `AUTO→${resolvedDirection.toUpperCase()} (${biasInfo.aboveCount} above / ${biasInfo.belowCount} below recently${biasInfo.tiebreak ? ', tiebreak' : ''})`
+            : contractType.replace('DIGIT', '');
         aiLog(`[AI] Trade placed on ${symbol} — ${directionTag} ${aiState.barrierDigit} @ $${stake.toFixed(2)} (#${contractId})`);
     } catch (err) {
         console.error('AI trade error:', err);
