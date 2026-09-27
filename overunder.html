@@ -193,6 +193,7 @@
       <select id="aiDirectionSelect" class="market-select">
         <option value="over">OVER</option>
         <option value="under">UNDER</option>
+        <option value="auto">AUTO (OVER ↔ UNDER)</option>
       </select>
       <select id="aiDigitSelect" class="market-select">
         <option value="0">0</option><option value="1">1</option><option value="2" selected>2</option>
@@ -200,7 +201,7 @@
         <option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option>
       </select>
     </div>
-    <div class="market-info">Trades OVER/UNDER the chosen digit only on markets where it's currently underrepresented.</div>
+    <div class="market-info">Trades OVER/UNDER the chosen digit only on markets where it's currently underrepresented. AUTO picks the direction per trade.</div>
   </div>
 
   <div class="stake-control" style="margin-bottom: 12px;">

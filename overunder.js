@@ -627,7 +627,7 @@ const aiState = {
     connected: false,
 
     barrierDigit: 2,
-    barrierDirection: 'over', // 'over' | 'under'
+    barrierDirection: 'over', // 'over' | 'under' | 'auto'
 
     marketStates: new Map(), // symbol -> { tickHistory, digitFrequency, pauseTicksRemaining, consecutiveLosses }
 
@@ -830,10 +830,24 @@ function aiCheckSessionLimits() {
     return true;
 }
 
+// Auto-direction resolver for the AI scanner's new combined mode — reuses
+// the SAME low/high digit-range convention already established in this
+// bot's manual resolveTradeStrategy(): low digits lean UNDER, high digits
+// lean OVER. Only used when the user picks "AUTO" instead of a fixed
+// OVER or UNDER — the fixed options are untouched.
+function aiResolveAutoDirection(barrierDigit) {
+    if (barrierDigit <= 4) return 'under';
+    if (barrierDigit >= 6) return 'over';
+    return 'under'; // digit 5: UNDER5 covers 5 digits (0-4) vs OVER5's 4 digits (6-9)
+}
+
 async function aiExecuteTrade(symbol) {
     aiState.tradeInFlight = true;
     const ms = aiState.marketStates.get(symbol);
-    const contractType = aiState.barrierDirection === 'over' ? 'DIGITOVER' : 'DIGITUNDER';
+    const resolvedDirection = aiState.barrierDirection === 'auto'
+        ? aiResolveAutoDirection(aiState.barrierDigit)
+        : aiState.barrierDirection;
+    const contractType = resolvedDirection === 'over' ? 'DIGITOVER' : 'DIGITUNDER';
     const stake = aiState.currentStake;
 
     try {
@@ -847,7 +861,8 @@ async function aiExecuteTrade(symbol) {
         const contractId = buy.buy.contract_id;
         aiState.activeContracts[contractId] = { stake, market: symbol };
         wsSend({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 });
-        aiLog(`[AI] Trade placed on ${symbol} — ${contractType.replace('DIGIT', '')} ${aiState.barrierDigit} @ $${stake.toFixed(2)} (#${contractId})`);
+        const directionTag = aiState.barrierDirection === 'auto' ? `AUTO→${resolvedDirection.toUpperCase()}` : contractType.replace('DIGIT', '');
+        aiLog(`[AI] Trade placed on ${symbol} — ${directionTag} ${aiState.barrierDigit} @ $${stake.toFixed(2)} (#${contractId})`);
     } catch (err) {
         console.error('AI trade error:', err);
         aiLog(`[AI] Trade failed on ${symbol}: ${err.message}`);
@@ -930,7 +945,8 @@ async function onAiStart() {
     AI_ALL_MARKETS.forEach((symbol) => wsSend({ ticks: symbol, subscribe: 1 }));
 
     aiState.running = true;
-    aiEls.scanLine.textContent = `Scanning ${AI_ALL_MARKETS.length} markets for digit ${aiState.barrierDigit} ${aiState.barrierDirection === 'over' ? 'OVER' : 'UNDER'} opportunities…`;
+    const directionLabel = aiState.barrierDirection === 'auto' ? 'AUTO (OVER ↔ UNDER)' : aiState.barrierDirection.toUpperCase();
+    aiEls.scanLine.textContent = `Scanning ${AI_ALL_MARKETS.length} markets for digit ${aiState.barrierDigit} ${directionLabel} opportunities…`;
     aiScanAllMarkets();
 }
 
