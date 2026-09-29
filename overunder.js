@@ -643,6 +643,9 @@ const aiState = {
     barrierDigit: 2,
     barrierDirection: 'over', // 'over' | 'under' | 'auto'
 
+    marketMode: 'AUTO', // 'AUTO' | a specific symbol like 'R_75'
+    settledMarket: null, // the single market currently being traded
+
     marketStates: new Map(), // symbol -> { tickHistory, digitFrequency, pauseTicksRemaining, consecutiveLosses }
 
     baseStake: 1,
@@ -670,6 +673,8 @@ function initAi() {
         backdrop: document.getElementById('aiBackdrop'),
         panel: document.getElementById('aiPanel'),
         closeBtn: document.getElementById('aiCloseBtn'),
+        marketSelect: document.getElementById('aiMarketSelect'),
+        marketInfo: document.getElementById('aiMarketInfo'),
         directionSelect: document.getElementById('aiDirectionSelect'),
         digitSelect: document.getElementById('aiDigitSelect'),
         stakeInput: document.getElementById('aiStakeInput'),
@@ -688,6 +693,18 @@ function initAi() {
     aiEls.fab.addEventListener('click', () => openAiPanel());
     aiEls.closeBtn.addEventListener('click', () => closeAiPanel());
     aiEls.backdrop.addEventListener('click', () => closeAiPanel());
+
+    aiEls.marketSelect.addEventListener('change', (e) => {
+        if (aiState.running) {
+            aiLog('Stop the AI before changing the market selection.');
+            e.target.value = aiState.marketMode;
+            return;
+        }
+        aiState.marketMode = e.target.value;
+        aiEls.marketInfo.textContent = aiState.marketMode === 'AUTO'
+            ? 'Auto mode scans all markets once at start and trades only the best one until you stop.'
+            : `Fixed to ${aiState.marketMode} — the AI will only trade this market.`;
+    });
 
     aiEls.directionSelect.addEventListener('change', (e) => { aiState.barrierDirection = e.target.value; });
     aiEls.digitSelect.addEventListener('change', (e) => { aiState.barrierDigit = parseInt(e.target.value, 10); });
@@ -805,29 +822,53 @@ busOn('tick', (tick) => {
     aiScanAllMarkets();
 });
 
+// Evaluates ONLY the single settled market (chosen once at AI start,
+// either by scanning all markets and picking the best, or fixed by the
+// user's manual market selection). The AI no longer jumps between
+// markets trade-to-trade — it stays on this one market until stopped.
 function aiScanAllMarkets() {
     if (!aiState.running || aiState.tradeInFlight) return;
     if (!aiCheckSessionLimits()) return;
+    if (!aiState.settledMarket) return;
 
+    const symbol = aiState.settledMarket;
+    const ms = aiState.marketStates.get(symbol);
+    if (!ms) return;
+
+    const result = aiEvaluateMarket(symbol, ms);
+    if (result.ready) {
+        aiEls.scanLine.innerHTML = `<strong>${symbol}</strong> — digit ${aiState.barrierDigit} at ${result.pct.toFixed(1)}% (below ${minFrequencyGap}% threshold). Firing trade…`;
+        aiExecuteTrade(symbol);
+    } else {
+        const reason = result.reason === 'paused' ? 'paused after recent losses' : `waiting (${result.pct !== undefined ? result.pct.toFixed(1) + '%' : 'collecting'})`;
+        aiEls.scanLine.textContent = `Settled on ${symbol} — ${reason}.`;
+    }
+}
+
+// Scans every market once, based on CURRENT frequency reading, and picks
+// the single best candidate to settle on for this AI session. "Best" =
+// already qualifying with the lowest frequency; if none currently
+// qualify, picks whichever is closest (lowest frequency) so the session
+// has a reasonable starting point instead of settling on nothing.
+function aiPickBestMarket() {
     let bestSymbol = null;
     let bestPct = Infinity;
+    let bestReady = false;
 
     for (const symbol of AI_ALL_MARKETS) {
         const ms = aiState.marketStates.get(symbol);
         if (!ms) continue;
         const result = aiEvaluateMarket(symbol, ms);
-        if (result.ready && result.pct < bestPct) {
-            bestPct = result.pct;
+        const pct = result.pct !== undefined ? result.pct : 100;
+        const isBetter = (result.ready && !bestReady) || (result.ready === bestReady && pct < bestPct);
+        if (isBetter) {
+            bestPct = pct;
+            bestReady = result.ready;
             bestSymbol = symbol;
         }
     }
 
-    if (bestSymbol) {
-        aiEls.scanLine.innerHTML = `Best candidate: <strong>${bestSymbol}</strong> — digit ${aiState.barrierDigit} at ${bestPct.toFixed(1)}% (below ${minFrequencyGap}% threshold). Firing trade…`;
-        aiExecuteTrade(bestSymbol);
-    } else {
-        aiEls.scanLine.textContent = `Scanning ${AI_ALL_MARKETS.length} markets — no market currently has digit ${aiState.barrierDigit} below ${minFrequencyGap}%.`;
-    }
+    return bestSymbol;
 }
 
 function aiCheckSessionLimits() {
@@ -1008,20 +1049,45 @@ async function onAiStart() {
     aiEls.startBtn.disabled = true;
     aiEls.stopBtn.disabled = false;
     aiEls.fabDot.classList.add('running');
-    aiEls.scanLine.textContent = `Loading history for ${AI_ALL_MARKETS.length} markets…`;
+    aiState.marketStates = new Map();
 
-    await Promise.all(AI_ALL_MARKETS.map((symbol) => aiPreloadMarket(symbol)));
-    AI_ALL_MARKETS.forEach((symbol) => wsSend({ ticks: symbol, subscribe: 1 }));
+    const directionLabel = aiState.barrierDirection === 'auto' ? 'AUTO (OVER ↔ UNDER)' : aiState.barrierDirection.toUpperCase();
+
+    if (aiState.marketMode === 'AUTO') {
+        aiEls.scanLine.textContent = `Scanning ${AI_ALL_MARKETS.length} markets to settle on the best one…`;
+        await Promise.all(AI_ALL_MARKETS.map((symbol) => aiPreloadMarket(symbol)));
+        aiState.settledMarket = aiPickBestMarket();
+    } else {
+        aiEls.scanLine.textContent = `Loading history for ${aiState.marketMode}…`;
+        await aiPreloadMarket(aiState.marketMode);
+        aiState.settledMarket = aiState.marketMode;
+    }
+
+    if (!aiState.settledMarket) {
+        aiLog('❌ Could not settle on a market — tick history failed to load. Try again.');
+        aiEls.startBtn.disabled = false;
+        aiEls.stopBtn.disabled = true;
+        aiEls.fabDot.classList.remove('running');
+        return;
+    }
+
+    // Only the settled market gets a live subscription — no need to keep
+    // streaming ticks for the other 12 once we've committed to one.
+    wsSend({ ticks: aiState.settledMarket, subscribe: 1 });
 
     aiState.running = true;
-    const directionLabel = aiState.barrierDirection === 'auto' ? 'AUTO (OVER ↔ UNDER)' : aiState.barrierDirection.toUpperCase();
-    aiEls.scanLine.textContent = `Scanning ${AI_ALL_MARKETS.length} markets for digit ${aiState.barrierDigit} ${directionLabel} opportunities…`;
+    aiEls.scanLine.innerHTML = `Settled on <strong>${aiState.settledMarket}</strong> — trading digit ${aiState.barrierDigit} ${directionLabel} here until stopped.`;
     aiScanAllMarkets();
 }
 
 function onAiStop() {
     aiState.running = false;
     aiState.tradeInFlight = false;
+    // Not calling forget_all here — the connection is shared with the
+    // manual section, and forget_all would kill its tick subscription
+    // too. Leaving the AI's one extra subscription running idle until
+    // the next Start (which resets marketStates fresh) is harmless.
+    aiState.settledMarket = null;
     aiEls.startBtn.disabled = !isConnected;
     aiEls.stopBtn.disabled = true;
     aiEls.fabDot.classList.remove('running');

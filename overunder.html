@@ -189,6 +189,24 @@
   </div>
 
   <div class="market-selector" style="margin-bottom: 12px;">
+    <label class="market-label">📊 MARKET</label>
+    <select id="aiMarketSelect" class="market-select">
+      <option value="AUTO" selected>Auto — scan all, settle on best</option>
+      <option value="R_10">Volatility 10 Index</option>
+      <option value="1HZ10V">Volatility 10 (1s) Index</option>
+      <option value="R_25">Volatility 25 Index</option>
+      <option value="1HZ25V">Volatility 25 (1s) Index</option>
+      <option value="R_50">Volatility 50 Index</option>
+      <option value="1HZ50V">Volatility 50 (1s) Index</option>
+      <option value="R_75">Volatility 75 Index</option>
+      <option value="1HZ75V">Volatility 75 (1s) Index</option>
+      <option value="R_100">Volatility 100 Index</option>
+      <option value="1HZ100V">Volatility 100 (1s) Index</option>
+    </select>
+    <div class="market-info" id="aiMarketInfo">Auto mode scans all markets once at start and trades only the best one until you stop.</div>
+  </div>
+
+  <div class="market-selector" style="margin-bottom: 12px;">
     <label class="market-label">🎯 BARRIER</label>
     <div class="ai-barrier-row">
       <select id="aiDirectionSelect" class="market-select">
