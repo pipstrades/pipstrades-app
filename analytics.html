@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>pipstrades — Trade Analytics</title>
+<link rel="stylesheet" href="/analytics.css" />
+</head>
+<body>
+
+<header>
+  <div class="brand">pipstrades <span class="accent">Analytics</span></div>
+  <a href="/dashboard" class="back-link">← Dashboard</a>
+</header>
+
+<main>
+  <h1>Trade Analytics</h1>
+  <p class="lead">Every settled trade from every bot, logged permanently on this device — judge strategy performance on real accumulated data, not a handful of trades.</p>
+
+  <div class="filters">
+    <select id="botFilter">
+      <option value="">All bots</option>
+    </select>
+    <select id="marketFilter">
+      <option value="">All markets</option>
+    </select>
+    <select id="directionFilter">
+      <option value="">All directions</option>
+    </select>
+  </div>
+
+  <div id="content"></div>
+
+  <section class="breakdown">
+    <h2>Data</h2>
+    <div class="actions">
+      <button class="btn export" id="exportBtn">⬇ Export CSV</button>
+      <button class="btn danger" id="clearBtn">🗑 Clear Entire Log</button>
+    </div>
+  </section>
+</main>
+
+<script type="module" src="/analytics.js"></script>
+</body>
+</html>

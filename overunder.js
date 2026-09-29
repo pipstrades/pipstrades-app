@@ -12,6 +12,7 @@ import {
 } from '/src/core/connection/wsClient.js';
 import { on as busOn } from '/src/core/state/eventBus.js';
 import { getAccountType } from '/src/core/state/accountPreference.js';
+import { logTrade } from '/src/core/state/tradeLog.js';
 
 console.log("=== OVER/UNDER BOT STARTING ===");
 
@@ -450,7 +451,20 @@ busOn('contractUpdate', (poc) => {
         let strat = activeContracts[contractId].strategy;
         let profit = parseFloat(poc.profit || 0);
         delete activeContracts[contractId];
-        if (poc.status === 'won') {
+        let cfg = strategyConfig[strat];
+        let won = poc.status === 'won';
+        logTrade({
+            bot: 'overunder-manual',
+            market: currentMarket,
+            direction: cfg ? cfg.contract_type.replace('DIGIT', '') : strat,
+            barrier: cfg ? Number(cfg.barrier) : null,
+            stake,
+            profit: won ? profit : -stake,
+            win: won,
+            contractId,
+            strategyLabel: cfg ? cfg.label : strat
+        });
+        if (won) {
             onTradeWin(profit);
             addHistoryItem(true, stake, profit, contractId, strat);
             updateStatus('✅ WIN +$' + profit.toFixed(2) + ' | P/L: ' + (totalProfit >= 0 ? '+' : '') + '$' + totalProfit.toFixed(2));
@@ -877,7 +891,13 @@ async function aiExecuteTrade(symbol) {
         });
         const buy = await wsSendRequest({ buy: proposal.proposal.id, price: stake });
         const contractId = buy.buy.contract_id;
-        aiState.activeContracts[contractId] = { stake, market: symbol };
+        aiState.activeContracts[contractId] = {
+            stake,
+            market: symbol,
+            direction: resolvedDirection.toUpperCase(),
+            barrier: aiState.barrierDigit,
+            strategyLabel: aiState.barrierDirection === 'auto' ? 'AI Auto' : `AI Fixed ${resolvedDirection.toUpperCase()}`
+        };
         wsSend({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 });
         const directionTag = biasInfo
             ? `AUTO→${resolvedDirection.toUpperCase()} (${biasInfo.aboveCount} above / ${biasInfo.belowCount} below recently${biasInfo.tiebreak ? ', tiebreak' : ''})`
@@ -903,8 +923,21 @@ busOn('contractUpdate', (poc) => {
     aiState.pnl += profit;
 
     const ms = aiState.marketStates.get(meta.market);
+    const won = poc.status === 'won';
 
-    if (poc.status === 'won') {
+    logTrade({
+        bot: 'overunder-ai',
+        market: meta.market,
+        direction: meta.direction,
+        barrier: meta.barrier,
+        stake: meta.stake,
+        profit: won ? profit : -meta.stake,
+        win: won,
+        contractId,
+        strategyLabel: meta.strategyLabel
+    });
+
+    if (won) {
         aiState.wins++;
         if (ms) { ms.pauseTicksRemaining = 0; }
         if (aiState.recoveryEnabled) aiState.currentStake = aiState.baseStake;
