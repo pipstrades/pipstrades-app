@@ -870,7 +870,21 @@ function aiComputeDirectionBias(ms, barrierDigit) {
     return { direction: tiebreak, aboveCount, belowCount, tiebreak: true };
 }
 
+const AI_MIN_STAKE = 0.35; // Deriv's practical minimum stake
+
 async function aiExecuteTrade(symbol) {
+    // Hard Stop-Loss ceiling: if this trade's full stake could lose more
+    // than the remaining SL room, cap the stake to that room instead of
+    // firing the full (possibly martingale-doubled) amount. If there
+    // isn't even enough room left for a minimum viable stake, stop
+    // instead of overshooting the configured SL.
+    const remainingRoom = aiState.stopLossAmount + aiState.pnl; // e.g. SL 20, pnl -18.5 -> 1.5 left
+    if (remainingRoom < AI_MIN_STAKE) {
+        aiLog(`🛑 Stop-loss room exhausted ($${remainingRoom.toFixed(2)} left of $${aiState.stopLossAmount.toFixed(2)}). Stopping AI before overshooting.`);
+        onAiStop();
+        return;
+    }
+
     aiState.tradeInFlight = true;
     const ms = aiState.marketStates.get(symbol);
     let resolvedDirection = aiState.barrierDirection;
@@ -880,7 +894,8 @@ async function aiExecuteTrade(symbol) {
         resolvedDirection = biasInfo.direction;
     }
     const contractType = resolvedDirection === 'over' ? 'DIGITOVER' : 'DIGITUNDER';
-    const stake = aiState.currentStake;
+    const wasCapped = aiState.currentStake > remainingRoom;
+    const stake = wasCapped ? Number(remainingRoom.toFixed(2)) : aiState.currentStake;
 
     try {
         const proposal = await wsSendRequest({
@@ -902,7 +917,8 @@ async function aiExecuteTrade(symbol) {
         const directionTag = biasInfo
             ? `AUTO→${resolvedDirection.toUpperCase()} (${biasInfo.aboveCount} above / ${biasInfo.belowCount} below recently${biasInfo.tiebreak ? ', tiebreak' : ''})`
             : contractType.replace('DIGIT', '');
-        aiLog(`[AI] Trade placed on ${symbol} — ${directionTag} ${aiState.barrierDigit} @ $${stake.toFixed(2)} (#${contractId})`);
+        const capNote = wasCapped ? ` [capped from $${aiState.currentStake.toFixed(2)} — SL room]` : '';
+        aiLog(`[AI] Trade placed on ${symbol} — ${directionTag} ${aiState.barrierDigit} @ $${stake.toFixed(2)}${capNote} (#${contractId})`);
     } catch (err) {
         console.error('AI trade error:', err);
         aiLog(`[AI] Trade failed on ${symbol}: ${err.message}`);
