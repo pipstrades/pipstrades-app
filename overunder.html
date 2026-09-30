@@ -171,9 +171,11 @@
 <!-- ============================================================
      AI MARKET SCANNER — floating icon + panel
      Runs as its own independent session alongside the manual
-     controls above. Fixed barrier (digit + Over/Under), scans
-     every volatility market, and trades only the markets where
-     that barrier's digit is currently underrepresented.
+     controls above. Chosen barrier (digit + Over/Under, or Auto),
+     settles on one market, and only trades when that direction's
+     actual recent win rate is meaningfully above its fair
+     baseline in that market — not based on the barrier digit's
+     own frequency.
      ============================================================ -->
 
 <button class="ai-fab" id="aiFab" title="AI Market Scanner">
@@ -220,7 +222,7 @@
         <option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option>
       </select>
     </div>
-    <div class="market-info">Trades OVER/UNDER the chosen digit only on markets where it's currently underrepresented. AUTO picks the direction per trade.</div>
+    <div class="market-info">Trades only when the chosen direction's actual recent win rate is meaningfully above its fair baseline. AUTO picks whichever direction has the bigger edge.</div>
   </div>
 
   <div class="stake-control" style="margin-bottom: 12px;">

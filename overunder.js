@@ -794,15 +794,62 @@ function aiRecalculateFrequency(ms) {
 // Reuses the SAME fixed 8% frequency-gap threshold already established
 // for this bot's manual logic — a market is a "good" candidate only when
 // the user's chosen barrier digit is currently below that threshold here.
+const AI_EDGE_THRESHOLD = 8; // percentage points of recent win rate above the fair baseline
+
+// The theoretical, fair win rate for OVER/UNDER at a given barrier,
+// ignoring any live skew — e.g. OVER 2 fairly wins on digits 3-9 (70%),
+// UNDER 2 fairly wins on digits 0-1 (20%).
+function aiBaselineWinPct(direction, barrierDigit) {
+    return direction === 'over' ? ((9 - barrierDigit) / 10) * 100 : (barrierDigit / 10) * 100;
+}
+
+// Computes how often OVER and UNDER at this barrier would ACTUALLY have
+// won recently in this market's own tick history, and compares each to
+// its fair baseline. This is the contract's real win condition (digits
+// landing above/below the barrier) — not the barrier digit's own
+// frequency, which doesn't actually determine whether OVER/UNDER wins.
+function aiComputeEdges(ms, barrierDigit) {
+    let aboveCount = 0, belowCount = 0;
+    for (const d of ms.tickHistory) {
+        if (d > barrierDigit) aboveCount++;
+        else if (d < barrierDigit) belowCount++;
+        // d === barrierDigit wins neither OVER nor UNDER.
+    }
+    const total = ms.tickHistory.length;
+    const overPct = (aboveCount / total) * 100;
+    const underPct = (belowCount / total) * 100;
+    return {
+        overPct, underPct,
+        overEdge: overPct - aiBaselineWinPct('over', barrierDigit),
+        underEdge: underPct - aiBaselineWinPct('under', barrierDigit)
+    };
+}
+
+// A market is a "good entry" when the chosen direction (or, in AUTO
+// mode, whichever direction currently has the bigger edge) is winning
+// meaningfully more often than its fair baseline predicts, right now,
+// in this specific market.
 function aiEvaluateMarket(symbol, ms) {
     if (ms.tickHistory.length < 20) return { ready: false, reason: 'collecting' };
 
-    const total = ms.tickHistory.length;
-    const pct = (ms.digitFrequency[aiState.barrierDigit] / total) * 100;
+    const edges = aiComputeEdges(ms, aiState.barrierDigit);
 
-    if (pct >= minFrequencyGap) return { ready: false, reason: 'above-threshold', pct };
+    if (aiState.barrierDirection === 'auto') {
+        if (edges.overEdge >= AI_EDGE_THRESHOLD && edges.overEdge >= edges.underEdge) {
+            return { ready: true, direction: 'over', pct: edges.overPct, edge: edges.overEdge };
+        }
+        if (edges.underEdge >= AI_EDGE_THRESHOLD && edges.underEdge > edges.overEdge) {
+            return { ready: true, direction: 'under', pct: edges.underPct, edge: edges.underEdge };
+        }
+        return { ready: false, reason: 'no-edge', overEdge: edges.overEdge, underEdge: edges.underEdge };
+    }
 
-    return { ready: true, pct };
+    const pct = aiState.barrierDirection === 'over' ? edges.overPct : edges.underPct;
+    const edge = aiState.barrierDirection === 'over' ? edges.overEdge : edges.underEdge;
+    if (edge >= AI_EDGE_THRESHOLD) {
+        return { ready: true, direction: aiState.barrierDirection, pct, edge };
+    }
+    return { ready: false, reason: 'below-edge', pct, edge };
 }
 
 busOn('tick', (tick) => {
@@ -833,32 +880,37 @@ function aiScanAllMarkets() {
 
     const result = aiEvaluateMarket(symbol, ms);
     if (result.ready) {
-        aiEls.scanLine.innerHTML = `<strong>${symbol}</strong> — digit ${aiState.barrierDigit} at ${result.pct.toFixed(1)}% (below ${minFrequencyGap}% threshold). Firing trade…`;
-        aiExecuteTrade(symbol);
+        aiEls.scanLine.innerHTML = `<strong>${symbol}</strong> — ${result.direction.toUpperCase()} ${aiState.barrierDigit} winning ${result.pct.toFixed(1)}% recently (+${result.edge.toFixed(1)}pp above fair). Firing trade…`;
+        aiExecuteTrade(symbol, result.direction);
+    } else if (result.reason === 'collecting') {
+        aiEls.scanLine.textContent = `Settled on ${symbol} — collecting tick history…`;
+    } else if (result.reason === 'no-edge') {
+        aiEls.scanLine.textContent = `Settled on ${symbol} — no edge yet (OVER ${result.overEdge.toFixed(1)}pp / UNDER ${result.underEdge.toFixed(1)}pp vs fair, need +${AI_EDGE_THRESHOLD}pp).`;
     } else {
-        const reason = result.reason === 'paused' ? 'paused after recent losses' : `waiting (${result.pct !== undefined ? result.pct.toFixed(1) + '%' : 'collecting'})`;
-        aiEls.scanLine.textContent = `Settled on ${symbol} — ${reason}.`;
+        aiEls.scanLine.textContent = `Settled on ${symbol} — waiting (${result.pct.toFixed(1)}% recent, ${result.edge >= 0 ? '+' : ''}${result.edge.toFixed(1)}pp vs fair, need +${AI_EDGE_THRESHOLD}pp).`;
     }
 }
 
-// Scans every market once, based on CURRENT frequency reading, and picks
-// the single best candidate to settle on for this AI session. "Best" =
-// already qualifying with the lowest frequency; if none currently
-// qualify, picks whichever is closest (lowest frequency) so the session
-// has a reasonable starting point instead of settling on nothing.
+// Scans every market once and picks the single best candidate to settle
+// on for this AI session. "Best" = already qualifying with the biggest
+// edge above fair; if none currently qualify, picks whichever has the
+// biggest edge regardless (closest to qualifying) so the session has a
+// reasonable starting point instead of settling on nothing.
 function aiPickBestMarket() {
     let bestSymbol = null;
-    let bestPct = Infinity;
+    let bestEdge = -Infinity;
     let bestReady = false;
 
     for (const symbol of AI_ALL_MARKETS) {
         const ms = aiState.marketStates.get(symbol);
         if (!ms) continue;
         const result = aiEvaluateMarket(symbol, ms);
-        const pct = result.pct !== undefined ? result.pct : 100;
-        const isBetter = (result.ready && !bestReady) || (result.ready === bestReady && pct < bestPct);
+        const edge = result.edge !== undefined
+            ? result.edge
+            : Math.max(result.overEdge || -Infinity, result.underEdge || -Infinity);
+        const isBetter = (result.ready && !bestReady) || (result.ready === bestReady && edge > bestEdge);
         if (isBetter) {
-            bestPct = pct;
+            bestEdge = edge;
             bestReady = result.ready;
             bestSymbol = symbol;
         }
@@ -881,35 +933,9 @@ function aiCheckSessionLimits() {
     return true;
 }
 
-// Auto-direction resolver for the AI scanner's combined mode. This now
-// looks at the SPECIFIC MARKET's own recent tick history (the same
-// rolling window already being scanned) and compares how often digits
-// landed ABOVE the barrier vs BELOW it — i.e. which of OVER/UNDER would
-// actually have won more often recently, in THIS market. This varies
-// market to market and drifts as new ticks arrive, unlike a fixed rule
-// based only on the barrier digit's value.
-function aiComputeDirectionBias(ms, barrierDigit) {
-    let aboveCount = 0;
-    let belowCount = 0;
-    for (const d of ms.tickHistory) {
-        if (d > barrierDigit) aboveCount++;
-        else if (d < barrierDigit) belowCount++;
-        // d === barrierDigit counts toward neither — that outcome loses
-        // both OVER and UNDER contracts alike.
-    }
-
-    if (aboveCount > belowCount) return { direction: 'over', aboveCount, belowCount };
-    if (belowCount > aboveCount) return { direction: 'under', aboveCount, belowCount };
-
-    // Exact tie — fall back to the same low/high digit-range convention
-    // already established in this bot's manual resolveTradeStrategy().
-    const tiebreak = barrierDigit <= 4 ? 'under' : (barrierDigit >= 6 ? 'over' : 'under');
-    return { direction: tiebreak, aboveCount, belowCount, tiebreak: true };
-}
-
 const AI_MIN_STAKE = 0.35; // Deriv's practical minimum stake
 
-async function aiExecuteTrade(symbol) {
+async function aiExecuteTrade(symbol, resolvedDirection) {
     // Hard Stop-Loss ceiling: if this trade's full stake could lose more
     // than the remaining SL room, cap the stake to that room instead of
     // firing the full (possibly martingale-doubled) amount. If there
@@ -923,13 +949,6 @@ async function aiExecuteTrade(symbol) {
     }
 
     aiState.tradeInFlight = true;
-    const ms = aiState.marketStates.get(symbol);
-    let resolvedDirection = aiState.barrierDirection;
-    let biasInfo = null;
-    if (aiState.barrierDirection === 'auto') {
-        biasInfo = aiComputeDirectionBias(ms, aiState.barrierDigit);
-        resolvedDirection = biasInfo.direction;
-    }
     const contractType = resolvedDirection === 'over' ? 'DIGITOVER' : 'DIGITUNDER';
     const wasCapped = aiState.currentStake > remainingRoom;
     const stake = wasCapped ? Number(remainingRoom.toFixed(2)) : aiState.currentStake;
@@ -951,8 +970,8 @@ async function aiExecuteTrade(symbol) {
             strategyLabel: aiState.barrierDirection === 'auto' ? 'AI Auto' : `AI Fixed ${resolvedDirection.toUpperCase()}`
         };
         wsSend({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 });
-        const directionTag = biasInfo
-            ? `AUTO→${resolvedDirection.toUpperCase()} (${biasInfo.aboveCount} above / ${biasInfo.belowCount} below recently${biasInfo.tiebreak ? ', tiebreak' : ''})`
+        const directionTag = aiState.barrierDirection === 'auto'
+            ? `AUTO→${resolvedDirection.toUpperCase()}`
             : contractType.replace('DIGIT', '');
         const capNote = wasCapped ? ` [capped from $${aiState.currentStake.toFixed(2)} — SL room]` : '';
         aiLog(`[AI] Trade placed on ${symbol} — ${directionTag} ${aiState.barrierDigit} @ $${stake.toFixed(2)}${capNote} (#${contractId})`);
