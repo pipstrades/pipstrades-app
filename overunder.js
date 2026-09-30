@@ -646,7 +646,7 @@ const aiState = {
     marketMode: 'AUTO', // 'AUTO' | a specific symbol like 'R_75'
     settledMarket: null, // the single market currently being traded
 
-    marketStates: new Map(), // symbol -> { tickHistory, digitFrequency, pauseTicksRemaining, consecutiveLosses }
+    marketStates: new Map(), // symbol -> { tickHistory, digitFrequency }
 
     baseStake: 1,
     currentStake: 1,
@@ -753,7 +753,6 @@ function createAiMarketState() {
     return {
         tickHistory: [],
         digitFrequency: { 0:0,1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0 },
-        pauseTicksRemaining: 0,
         decimalPlaces: 4,
         decimalPlacesDetected: false
     };
@@ -797,7 +796,6 @@ function aiRecalculateFrequency(ms) {
 // the user's chosen barrier digit is currently below that threshold here.
 function aiEvaluateMarket(symbol, ms) {
     if (ms.tickHistory.length < 20) return { ready: false, reason: 'collecting' };
-    if (ms.pauseTicksRemaining > 0) return { ready: false, reason: 'paused' };
 
     const total = ms.tickHistory.length;
     const pct = (ms.digitFrequency[aiState.barrierDigit] / total) * 100;
@@ -816,8 +814,6 @@ busOn('tick', (tick) => {
     ms.tickHistory.push(digit);
     if (ms.tickHistory.length > 200) ms.tickHistory.shift();
     aiRecalculateFrequency(ms);
-
-    if (ms.pauseTicksRemaining > 0) ms.pauseTicksRemaining--;
 
     aiScanAllMarkets();
 });
@@ -996,19 +992,14 @@ busOn('contractUpdate', (poc) => {
 
     if (won) {
         aiState.wins++;
-        if (ms) { ms.pauseTicksRemaining = 0; }
         if (aiState.recoveryEnabled) aiState.currentStake = aiState.baseStake;
         aiLog(`[AI] WIN +$${profit.toFixed(2)} on ${meta.market} — session P/L $${aiState.pnl.toFixed(2)}`);
         addHistoryItem(true, meta.stake, profit, contractId, 'ai-' + meta.market);
     } else {
         aiState.losses++;
-        if (ms) {
-            ms.consecutiveLossesAi = (ms.consecutiveLossesAi || 0) + 1;
-            if (ms.consecutiveLossesAi >= maxConsecLosses) {
-                ms.pauseTicksRemaining = pauseTicksAfterLoss;
-                ms.consecutiveLossesAi = 0;
-            }
-        }
+        // No pause-after-losses here by design — the AI now only stops
+        // for Stop-Loss or Take-Profit, so performance can be judged
+        // cleanly without an extra stopping condition muddying results.
         if (aiState.recoveryEnabled) aiState.currentStake = parseFloat((aiState.currentStake * 2).toFixed(2));
         aiLog(`[AI] LOSS -$${meta.stake.toFixed(2)} on ${meta.market} — session P/L $${aiState.pnl.toFixed(2)}`);
         addHistoryItem(false, meta.stake, -meta.stake, contractId, 'ai-' + meta.market);
