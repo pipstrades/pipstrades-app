@@ -223,6 +223,9 @@
       </select>
     </div>
     <div class="market-info">Trades only when the chosen direction's actual recent win rate is meaningfully above its fair baseline. AUTO picks whichever direction has the bigger edge.</div>
+    <label class="market-label" style="margin-top: 10px;">⚡ EDGE THRESHOLD (PERCENTAGE POINTS ABOVE FAIR)</label>
+    <input type="number" id="aiEdgeThresholdInput" class="stake-input" value="3" min="0.5" max="20" step="0.5" style="font-size: 1rem;">
+    <div class="market-info">Lower = trades fire sooner and more often, but each signal is statistically weaker. Higher = fewer, stronger-looking signals, longer waits.</div>
   </div>
 
   <div class="stake-control" style="margin-bottom: 12px;">

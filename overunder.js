@@ -642,6 +642,7 @@ const aiState = {
 
     barrierDigit: 2,
     barrierDirection: 'over', // 'over' | 'under' | 'auto'
+    edgeThreshold: 3, // percentage points above fair baseline required to fire
 
     marketMode: 'AUTO', // 'AUTO' | a specific symbol like 'R_75'
     settledMarket: null, // the single market currently being traded
@@ -677,6 +678,7 @@ function initAi() {
         marketInfo: document.getElementById('aiMarketInfo'),
         directionSelect: document.getElementById('aiDirectionSelect'),
         digitSelect: document.getElementById('aiDigitSelect'),
+        edgeThresholdInput: document.getElementById('aiEdgeThresholdInput'),
         stakeInput: document.getElementById('aiStakeInput'),
         recoveryToggle: document.getElementById('aiRecoveryToggle'),
         stopLossInput: document.getElementById('aiStopLossInput'),
@@ -708,6 +710,10 @@ function initAi() {
 
     aiEls.directionSelect.addEventListener('change', (e) => { aiState.barrierDirection = e.target.value; });
     aiEls.digitSelect.addEventListener('change', (e) => { aiState.barrierDigit = parseInt(e.target.value, 10); });
+    aiEls.edgeThresholdInput.addEventListener('input', (e) => {
+        const v = parseFloat(e.target.value);
+        if (!isNaN(v) && v > 0) aiState.edgeThreshold = v;
+    });
 
     aiEls.recoveryToggle.addEventListener('change', (e) => { aiState.recoveryEnabled = e.target.checked; });
 
@@ -794,7 +800,11 @@ function aiRecalculateFrequency(ms) {
 // Reuses the SAME fixed 8% frequency-gap threshold already established
 // for this bot's manual logic — a market is a "good" candidate only when
 // the user's chosen barrier digit is currently below that threshold here.
-const AI_EDGE_THRESHOLD = 8; // percentage points of recent win rate above the fair baseline
+// Percentage points of recent win rate above the fair baseline required
+// before the AI will fire a trade. Adjustable live from the panel —
+// lower fires sooner/more often (each signal is statistically weaker),
+// higher waits for a stronger-looking (rarer) read. Default lowered from
+// an earlier 8pp, which was rarely reached within a reasonable session.
 
 // The theoretical, fair win rate for OVER/UNDER at a given barrier,
 // ignoring any live skew — e.g. OVER 2 fairly wins on digits 3-9 (70%),
@@ -835,10 +845,10 @@ function aiEvaluateMarket(symbol, ms) {
     const edges = aiComputeEdges(ms, aiState.barrierDigit);
 
     if (aiState.barrierDirection === 'auto') {
-        if (edges.overEdge >= AI_EDGE_THRESHOLD && edges.overEdge >= edges.underEdge) {
+        if (edges.overEdge >= aiState.edgeThreshold && edges.overEdge >= edges.underEdge) {
             return { ready: true, direction: 'over', pct: edges.overPct, edge: edges.overEdge };
         }
-        if (edges.underEdge >= AI_EDGE_THRESHOLD && edges.underEdge > edges.overEdge) {
+        if (edges.underEdge >= aiState.edgeThreshold && edges.underEdge > edges.overEdge) {
             return { ready: true, direction: 'under', pct: edges.underPct, edge: edges.underEdge };
         }
         return { ready: false, reason: 'no-edge', overEdge: edges.overEdge, underEdge: edges.underEdge };
@@ -846,7 +856,7 @@ function aiEvaluateMarket(symbol, ms) {
 
     const pct = aiState.barrierDirection === 'over' ? edges.overPct : edges.underPct;
     const edge = aiState.barrierDirection === 'over' ? edges.overEdge : edges.underEdge;
-    if (edge >= AI_EDGE_THRESHOLD) {
+    if (edge >= aiState.edgeThreshold) {
         return { ready: true, direction: aiState.barrierDirection, pct, edge };
     }
     return { ready: false, reason: 'below-edge', pct, edge };
@@ -885,9 +895,9 @@ function aiScanAllMarkets() {
     } else if (result.reason === 'collecting') {
         aiEls.scanLine.textContent = `Settled on ${symbol} — collecting tick history…`;
     } else if (result.reason === 'no-edge') {
-        aiEls.scanLine.textContent = `Settled on ${symbol} — no edge yet (OVER ${result.overEdge.toFixed(1)}pp / UNDER ${result.underEdge.toFixed(1)}pp vs fair, need +${AI_EDGE_THRESHOLD}pp).`;
+        aiEls.scanLine.textContent = `Settled on ${symbol} — no edge yet (OVER ${result.overEdge.toFixed(1)}pp / UNDER ${result.underEdge.toFixed(1)}pp vs fair, need +${aiState.edgeThreshold}pp).`;
     } else {
-        aiEls.scanLine.textContent = `Settled on ${symbol} — waiting (${result.pct.toFixed(1)}% recent, ${result.edge >= 0 ? '+' : ''}${result.edge.toFixed(1)}pp vs fair, need +${AI_EDGE_THRESHOLD}pp).`;
+        aiEls.scanLine.textContent = `Settled on ${symbol} — waiting (${result.pct.toFixed(1)}% recent, ${result.edge >= 0 ? '+' : ''}${result.edge.toFixed(1)}pp vs fair, need +${aiState.edgeThreshold}pp).`;
     }
 }
 
