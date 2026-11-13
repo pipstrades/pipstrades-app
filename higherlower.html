@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>pipstrades — Higher/Lower Bot</title>
+    <link rel="stylesheet" href="/overunder.css">
+    <link rel="stylesheet" href="/higherlower.css">
+</head>
+<body>
+<div class="app-container">
+
+    <!-- HEADER -->
+    <div class="glass-card header">
+        <div class="logo">
+            <h1>⚡ HIGHER/LOWER BOT</h1>
+            <p>Dual-contract trading | Higher + Lower every round</p>
+        </div>
+        <div class="token-panel">
+            <a href="/dashboard" class="back-link">← Dashboard</a>
+            <div class="connection-status">
+                <span class="status-dot" id="connectionDot"></span>
+                <span id="connectionStatusText">Connecting…</span>
+            </div>
+            <div class="balance-box">
+                <span class="balance-label">BALANCE</span>
+                <span id="balanceValue" class="balance-amount">0.00</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- STATISTICS -->
+    <div class="glass-card stats-section">
+        <div class="stats-container">
+            <div class="stat-card"><div class="stat-label">🎯 TOTAL TRADES</div><div class="stat-value" id="statTrades">0</div></div>
+            <div class="stat-card win-stat"><div class="stat-label">✅ WINS</div><div class="stat-value" id="statWins">0</div></div>
+            <div class="stat-card loss-stat"><div class="stat-label">❌ LOSSES</div><div class="stat-value" id="statLosses">0</div></div>
+            <div class="stat-card"><div class="stat-label">📈 WIN RATE</div><div class="stat-value" id="statWinRate">0%</div></div>
+            <div class="stat-card profit-stat"><div class="stat-label">💰 SESSION P/L</div><div class="stat-value" id="statPL">$0.00</div></div>
+            <div class="stat-card recovery-stat"><div class="stat-label">🔄 MARTINGALE</div><div class="stat-value" id="statMartingale">OFF</div></div>
+        </div>
+    </div>
+
+    <!-- TRADING DASHBOARD -->
+    <div class="trading-dashboard">
+
+        <!-- LEFT: Controls -->
+        <div class="glass-card contract-panel">
+            <div class="section-title">📈 HIGHER / LOWER CONTROLS</div>
+
+            <div class="market-selector">
+                <label class="market-label">📊 SELECT MARKET</label>
+                <select id="symbolSelect" class="market-select">
+                    <option value="1HZ10V">Volatility 10 (1s) Index</option>
+                    <option value="1HZ25V">Volatility 25 (1s) Index</option>
+                    <option value="1HZ50V" selected>Volatility 50 (1s) Index</option>
+                    <option value="1HZ75V">Volatility 75 (1s) Index</option>
+                    <option value="1HZ100V">Volatility 100 (1s) Index</option>
+                    <option value="R_10">Volatility 10 Index</option>
+                    <option value="R_25">Volatility 25 Index</option>
+                    <option value="R_50">Volatility 50 Index</option>
+                    <option value="R_75">Volatility 75 Index</option>
+                    <option value="R_100">Volatility 100 Index</option>
+                </select>
+            </div>
+
+            <div class="live-price-container">
+                <div class="live-price-label" id="tickerSymbolName">NO SYMBOL SELECTED</div>
+                <div id="tickerPrice" class="live-price">—</div>
+                <div class="hl-ticker-row">
+                    <span class="ticker-trend neutral" id="tickerTrend">NEUTRAL</span>
+                    <span class="ticker-prob" id="tickerProb">50%</span>
+                </div>
+            </div>
+
+            <!-- Trade settings -->
+            <div class="market-selector">
+                <div class="hl-grid-2">
+                    <div>
+                        <label class="market-label">⏱ DURATION</label>
+                        <input type="number" id="durationVal" class="hl-input" value="5" min="1" step="1">
+                        <div class="hl-hint" id="durationRangeHint">Range: 5 – 10</div>
+                    </div>
+                    <div>
+                        <label class="market-label">DURATION UNIT</label>
+                        <select id="durationUnit" class="market-select">
+                            <option value="t" selected>Ticks</option>
+                            <option value="s">Seconds</option>
+                            <option value="m">Minutes</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="market-selector">
+                <div class="hl-grid-2">
+                    <div>
+                        <label class="market-label">CONTRACT TYPE</label>
+                        <select id="contractTypeMode" class="market-select">
+                            <option value="callput">CALL / PUT (classic)</option>
+                            <option value="higherlower" selected>HIGHER / LOWER (native)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="market-label">BARRIER FORMAT</label>
+                        <select id="barrierFormat" class="market-select">
+                            <option value="relative" selected>Relative (+/− offset)</option>
+                            <option value="absolute">Absolute (price level)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="market-selector">
+                <label class="market-label">BARRIER SIDES</label>
+                <select id="barrierMode" class="market-select">
+                    <option value="opposite" selected>Opposite (Higher +, Lower −)</option>
+                    <option value="same">Same level (both +, HL PRO style)</option>
+                </select>
+                <label class="market-label" style="margin-top: 12px;">BARRIER OFFSET</label>
+                <input type="number" id="barrierOffset" class="hl-input" value="0.3" min="0.01" step="0.01">
+                <div class="hl-hint">Distance from entry spot — direction follows Barrier Sides.</div>
+            </div>
+
+            <!-- Stakes -->
+            <div class="stake-control hl-higher">
+                <label class="stake-label">📈 HIGHER STAKE (USD)</label>
+                <input type="number" id="higherStake" class="stake-input" value="1.00" step="0.50" min="0.35">
+            </div>
+            <div class="stake-control hl-lower">
+                <label class="stake-label">📉 LOWER STAKE (USD)</label>
+                <input type="number" id="lowerStake" class="stake-input" value="1.00" step="0.50" min="0.35">
+            </div>
+
+            <!-- Entry signal -->
+            <div class="improve-panel">
+                <div class="improve-title">⚡ Entry Signal</div>
+                <div class="hl-row">
+                    <div class="hl-row-label">Wait for tick confirmation</div>
+                    <label class="switch"><input type="checkbox" id="scannerOn"><span class="slider round"></span></label>
+                    <input type="number" id="scannerTicks" class="hl-input hl-mini" value="3" min="1" step="1" disabled>
+                </div>
+                <div class="hl-hint">Buys the pair only after this many consecutive rising or falling ticks. A flat tick resets the count, and it re-scans after every round. Off = trade every round immediately.</div>
+            </div>
+
+            <!-- Risk & staking -->
+            <div class="improve-panel">
+                <div class="improve-title">🛡️ Risk &amp; Staking</div>
+                <div class="hl-row">
+                    <div class="hl-row-label">Martingale on loss (multiplier)</div>
+                    <label class="switch"><input type="checkbox" id="martingaleOn"><span class="slider round"></span></label>
+                    <input type="number" id="martingaleMult" class="hl-input hl-mini" value="2" min="1" step="0.1" disabled>
+                </div>
+                <div class="hl-grid-2">
+                    <div>
+                        <label class="market-label">🛑 STOP LOSS ($)</label>
+                        <input type="number" id="stopLoss" class="hl-input" placeholder="Off" min="0" step="0.01">
+                    </div>
+                    <div>
+                        <label class="market-label">🎯 TAKE PROFIT ($)</label>
+                        <input type="number" id="takeProfit" class="hl-input" placeholder="Off" min="0" step="0.01">
+                    </div>
+                </div>
+                <label class="market-label" style="margin-top: 12px;">PAUSE AFTER CONSECUTIVE LOSSES</label>
+                <input type="number" id="maxLossStreak" class="hl-input" placeholder="Off" min="0" step="1">
+            </div>
+
+            <div class="bot-controls">
+                <button id="btnStart" class="start-bot-btn" disabled>▶ START BOT</button>
+                <button id="btnStop" class="stop-bot-btn" disabled>⏹ STOP BOT</button>
+            </div>
+
+            <div id="botState" class="bot-status">🤖 Bot is idle</div>
+            <div id="logLine" class="status-msg">⏳ Connecting to your Deriv account…</div>
+        </div>
+
+        <!-- RIGHT: History -->
+        <div class="glass-card history-panel">
+            <div class="section-title">📜 TRADE HISTORY</div>
+            <div id="historyList" class="history-list">
+                <div style="text-align:center;color:#5b6e8c;">No trades yet</div>
+            </div>
+            <button id="btnClearHistory" class="clear-history">🗑 Clear History &amp; Reset Stats</button>
+        </div>
+
+    </div>
+</div>
+
+<script type="module" src="/higherlower.js"></script>
+</body>
+</html>
